@@ -38,6 +38,17 @@ export default defineConfig({
         },
       },
       {
+        // Opt-in: CLUSTER FAILOVER under load (NVK_CHAOS=1, `pnpm test:chaos`).
+        test: {
+          name: 'chaos',
+          sequence: { groupOrder: 3 },
+          include: ['test/chaos/**/*.test.ts'],
+          setupFiles: ['test/support/setup.ts'],
+          testTimeout: 120_000,
+          fileParallelism: false,
+        },
+      },
+      {
         // Packs the package and installs it into a Nest 11 CommonJS and a Nest 12 ESM application.
         test: {
           name: 'consumers',
