@@ -38,7 +38,8 @@
         "vitest/expect-expect": "off",
         "import/no-unassigned-import": "off",
         "import/no-named-as-default-member": "off",
-        "unicorn/consistent-function-scoping": "off"
+        "unicorn/consistent-function-scoping": "off",
+        "vitest/valid-title": "off"
       }
     }
   ],

@@ -59,12 +59,14 @@ export interface Target {
   connect(): Promise<Connection>;
 }
 
-export const glideStandalone = (at = env.standalone, label = 'valkey'): Target => ({
-  name: `glide on ${label} standalone`,
-  skip: at ? false : `no address for ${label}`,
+/** `on: 'redis'` is the server REDIS_URL names (Redis 7.0 in CI), instead of VALKEY_URL's. */
+export const glideStandalone = (on: 'valkey' | 'redis' = 'valkey'): Target => ({
+  name: `glide on ${on} standalone`,
+  skip: missing(on === 'valkey' ? 'VALKEY_URL' : 'REDIS_URL'),
   cluster: false,
   async connect() {
-    const client = await GlideClient.createClient({ addresses: [at!], requestTimeout: TIMEOUT });
+    const at = on === 'valkey' ? env.standalone! : env.redis!;
+    const client = await GlideClient.createClient({ addresses: [at], requestTimeout: TIMEOUT });
     return { runner: glideRunner(client), close: async () => client.close() };
   },
 });
@@ -105,14 +107,13 @@ const clusterClient = (flavour: IoredisFlavour, scaleReads: 'master' | 'slave') 
 
 export const ioredisStandalone = (
   flavour: IoredisFlavour = 'ioredis',
-  at = env.standalone,
-  label = 'valkey',
+  on: 'valkey' | 'redis' = 'valkey',
 ): Target => ({
-  name: `${flavour} on ${label} standalone`,
-  skip: at ? false : `no address for ${label}`,
+  name: `${flavour} on ${on} standalone`,
+  skip: missing(on === 'valkey' ? 'VALKEY_URL' : 'REDIS_URL'),
   cluster: false,
   async connect() {
-    const client = standaloneClient(flavour, at!);
+    const client = standaloneClient(flavour, on === 'valkey' ? env.standalone! : env.redis!);
     await ping(client);
     return { runner: ioredisRunner(client), close: async () => void (await client.quit()) };
   },
@@ -159,8 +160,8 @@ export const allTargets = (): Target[] => [
   ioredisStandalone('iovalkey'),
   ioredisCluster('iovalkey'),
   ioredisSentinel(),
-  glideStandalone(env.redis, 'redis'),
-  ioredisStandalone('ioredis', env.redis, 'redis'),
+  glideStandalone('redis'),
+  ioredisStandalone('ioredis', 'redis'),
 ];
 
 /** The four that cover both clients on both topologies. */
