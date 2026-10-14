@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm check:package
+
+  servers:
+    name: servers (valkey ${{ matrix.valkey }}, redis ${{ matrix.redis }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - valkey: '8.1'
+            redis: '7.0'
+          - valkey: '9.1'
+            redis: '8'
+    env:
+      VALKEY_IMAGE: valkey/valkey:${{ matrix.valkey }}-alpine
+      REDIS_IMAGE: redis:${{ matrix.redis }}-alpine
+      REDIS_URL: redis://127.0.0.1:16380
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: docker compose -f docker/compose.yml --profile redis up -d --wait
+      - run: pnpm test:servers
+      - if: failure()
+        run: docker compose -f docker/compose.yml --profile redis logs
+      - if: always()
+        run: docker compose -f docker/compose.yml --profile redis down --volumes
+
+  consumers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20.19.0
+      - run: echo "NODE_20=$(which node)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.12.0
+      - run: echo "NODE_22=$(which node)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+      - run: echo "NODE_26=$(which node)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: echo "NODE_24=$(which node)" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - run: docker compose -f docker/compose.yml up -d --wait valkey
+      - run: pnpm test:consumers
+        env:
+          CONSUMER_NODES: 20.19.0=${{ env.NODE_20 }},22.12.0=${{ env.NODE_22 }},24=${{ env.NODE_24 }},26=${{ env.NODE_26 }}
+      - if: always()
+        run: docker compose -f docker/compose.yml down --volumes
