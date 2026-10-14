@@ -72,7 +72,7 @@
     "format": "prettier --write .",
     "test": "vitest run --project unit",
     "test:unit": "vitest run --project unit",
-    "test:servers": "node --env-file=docker/servers.env node_modules/vitest/vitest.mjs run --project servers",
+    "test:servers": "node --env-file=docker/servers.env node_modules/vitest/vitest.mjs run --project servers --project servers-exclusive",
     "test:consumers": "pnpm build && node --env-file=docker/servers.env node_modules/vitest/vitest.mjs run --project consumers",
     "check:package": "publint --strict && attw --pack . --profile esm-only",
     "servers:up": "docker compose -f docker/compose.yml up -d --wait",
