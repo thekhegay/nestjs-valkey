@@ -47,10 +47,10 @@ const EMOJI = [
   [/revert/, '⏪'],
 ];
 
-const [command, ...flags] = process.argv.slice(2);
+const [command, ...cliFlags] = process.argv.slice(2);
 
-if (command === 'prepare') await prepare(flags);
-else if (command === 'body') body(flags);
+if (command === 'prepare') await prepare(cliFlags);
+else if (command === 'body') body(cliFlags);
 else if (command === 'check') check();
 else fail('Usage: release.mjs prepare --bump=<patch|minor|major> | body [--output=<file>] | check');
 
@@ -58,7 +58,8 @@ async function prepare(flags) {
   // Refused rather than ignored: an ignored `--dry-run` would read like a
   // rehearsal and still rewrite three files.
   const bump = flags.length === 1 && /^--bump=(patch|minor|major)$/.exec(flags[0])?.[1];
-  if (!bump) fail('Usage: release.mjs prepare --bump=<patch|minor|major>. There is no dry run, this always writes.');
+  if (!bump)
+    fail('Usage: release.mjs prepare --bump=<patch|minor|major>. There is no dry run, this always writes.');
 
   // The bump is picked by hand in the Actions tab, so nothing else connects it
   // to the commits. Below 1.0 a breaking change rides a minor, from 1.0 a major.
@@ -69,7 +70,7 @@ async function prepare(flags) {
     fail(
       [
         `Refusing --bump=${bump}: ${breaking.length} breaking commit(s) since ${lastTag()}.`,
-        ...breaking.map(subject => `  ${subject}`),
+        ...breaking.map((subject) => `  ${subject}`),
         `On ${current} a breaking change needs --bump=${floor[0]}.`,
       ].join('\n'),
     );
@@ -99,11 +100,11 @@ async function prepare(flags) {
 }
 
 function body(flags) {
-  const output = flags.find(flag => flag.startsWith('--output='))?.slice('--output='.length);
+  const output = flags.find((flag) => flag.startsWith('--output='))?.slice('--output='.length);
   if (flags.length > (output ? 1 : 0)) fail('Usage: release.mjs body [--output=<file>]');
 
   const lines = readFileSync(CHANGELOG, 'utf8').split('\n');
-  const start = lines.findIndex(line => line.startsWith('## '));
+  const start = lines.findIndex((line) => line.startsWith('## '));
   if (start < 0) fail('CHANGELOG.md has no release section.');
   const end = lines.findIndex((line, i) => i > start && line.startsWith('## '));
 
@@ -172,7 +173,7 @@ function footer() {
   ]);
   const newcomers = (notes.split('## New Contributors')[1] ?? '')
     .split('\n')
-    .filter(line => line.startsWith('* @') && !line.startsWith('* @github-actions[bot]'));
+    .filter((line) => line.startsWith('* @') && !line.startsWith('* @github-actions[bot]'));
   const full = /^\*\*Full Changelog\*\*: .+$/m.exec(notes)?.[0];
   return [newcomers.length ? `### 👋 New Contributors\n\n${newcomers.join('\n')}` : '', full ?? '']
     .filter(Boolean)
@@ -180,31 +181,37 @@ function footer() {
 }
 
 function check() {
+  if (!existsSync(CHANGELOG)) fail('CHANGELOG.md is missing. Cut the release with the Release PR workflow.');
   const lines = readFileSync(CHANGELOG, 'utf8').split('\n');
-  const start = lines.findIndex(line => line.startsWith('## '));
-  if (start < 0 || !lines[start].includes(`[${PKG.version}]`)) {
+  const start = lines.findIndex((line) => line.startsWith('## '));
+  // `## [1.2.0](compare link) (date)` normally, `## 0.1.0 (date)` for a first
+  // release, which has no previous tag to compare against.
+  const heading = new RegExp(`^## \\[?${PKG.version.replaceAll('.', '\\.')}\\]?[ (]`);
+  if (start < 0 || !heading.test(lines[start])) {
     fail(`CHANGELOG.md does not open with a ${PKG.version} section. Run Release PR again.`);
   }
   const end = lines.findIndex((line, i) => i > start && line.startsWith('## '));
   const section = lines.slice(start, end < 0 ? undefined : end).join('\n');
 
-  const missing = execFileSync('git', ['log', '--format=%H %s', `${previousTag()}..HEAD`], {
+  // A first release has no tag before it: everything up to HEAD ships.
+  const since = previousTag();
+  const missing = execFileSync('git', ['log', '--format=%H %s', since ? `${since}..HEAD` : 'HEAD'], {
     cwd: ROOT,
     encoding: 'utf8',
   })
     .split('\n')
-    .filter(line => /^[0-9a-f]{40} (feat|fix|perf|revert)(\([^)]*\))?!?:/.test(line))
-    .filter(line => !section.includes(line.slice(0, 40)));
+    .filter((line) => /^[0-9a-f]{40} (feat|fix|perf|revert)(\([^)]*\))?!?:/.test(line))
+    .filter((line) => !section.includes(line.slice(0, 40)));
   if (missing.length > 0) {
     fail(
       [
         `CHANGELOG.md misses ${missing.length} commit(s) that would ship in v${PKG.version}:`,
-        ...missing.map(line => `  ${line.slice(0, 7)} ${line.slice(41)}`),
+        ...missing.map((line) => `  ${line.slice(0, 7)} ${line.slice(41)}`),
         'main moved after the release pull request was cut. Run Release PR again with the same bump.',
       ].join('\n'),
     );
   }
-  console.log(`CHANGELOG.md covers everything since ${previousTag()}`);
+  console.log(`CHANGELOG.md covers everything since ${since ?? 'the first commit'}`);
 }
 
 // The newest release tag other than the one being cut. `lastTag()` is the
@@ -212,7 +219,7 @@ function check() {
 function previousTag() {
   return execFileSync('git', ['tag', '--sort=-v:refname'], { cwd: ROOT, encoding: 'utf8' })
     .split('\n')
-    .find(tag => /^v\d+\.\d+\.\d+$/.test(tag) && tag !== `v${PKG.version}`);
+    .find((tag) => /^v\d+\.\d+\.\d+$/.test(tag) && tag !== `v${PKG.version}`);
 }
 
 function gh(args) {
@@ -222,16 +229,19 @@ function gh(args) {
 function lastTag() {
   return execFileSync('git', ['tag', '--sort=-v:refname'], { cwd: ROOT, encoding: 'utf8' })
     .split('\n')
-    .find(tag => /^v\d+\.\d+\.\d+$/.test(tag));
+    .find((tag) => /^v\d+\.\d+\.\d+$/.test(tag));
 }
 
 function breakingSince(tag) {
   if (!tag) return [];
-  return execFileSync('git', ['log', '-z', '--format=%s%n%b', `${tag}..HEAD`], { cwd: ROOT, encoding: 'utf8' })
+  return execFileSync('git', ['log', '-z', '--format=%s%n%b', `${tag}..HEAD`], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
     .split('\0')
-    .map(commit => commit.trim())
-    .filter(commit => /^[a-z]+(\([^)]*\))?!:/.test(commit) || /^BREAKING[ -]CHANGE:/m.test(commit))
-    .map(commit => commit.split('\n')[0]);
+    .map((commit) => commit.trim())
+    .filter((commit) => /^[a-z]+(\([^)]*\))?!:/.test(commit) || /^BREAKING[ -]CHANGE:/m.test(commit))
+    .map((commit) => commit.split('\n')[0]);
 }
 
 function fail(message) {
