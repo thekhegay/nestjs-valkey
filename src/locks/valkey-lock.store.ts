@@ -21,7 +21,7 @@ export interface ValkeyLockStoreOptions {
    * Tokens stay monotonic across any clock shift while the record lives; after it expires, across
    * a server clock (or, after a failover, a replica's) that reads less than this behind. Default
    * `60_000` (a minute), many times what a clock under NTP steps back (a leap second, a correction
-   * of a second or so). Every key acquired within it keeps a record of 110 to 140 bytes.
+   * of a second or so). Every key acquired within it keeps a record of about 105 to 140 bytes, by server version.
    */
   fenceRetention?: number;
   /** `'warn'` (default), `'strict'`, or `false`. See `checkServer()`. */

@@ -120,10 +120,10 @@ but too large for a 32-bit column: store them as `bigint`. They are comparable p
 asks, and they do not start at 1.
 
 The fence matters only for a clock that steps back. While it lives, tokens grow whatever the clock does; once it
-has expired, a server clock (or, after a failover, the new primary's) that reads more than `fenceRetention` behind
-the last token hands out a smaller one. The default, a minute, is many times what a clock under NTP steps back (a
-leap second, a correction of a second or so) and the skew NTP leaves between a primary and its replicas
-(milliseconds). Raise it where a clock can be minutes off: no NTP, a hardware clock kept in local time, VMs
+has expired, a server clock (or, after a failover, the new primary's) that steps back by more than
+`fenceRetention` past the last token hands out a smaller one. The default, a minute, is many times what a clock under NTP steps back (a
+leap second, a correction of a second or so). A fence lost whole in an asynchronous failover is a different
+case that no retention covers. Raise it where a clock can be minutes off: no NTP, a hardware clock kept in local time, VMs
 restored from a snapshot.
 
 Every key acquired within `fenceRetention` keeps its fence, and `noeviction` never frees one early. Measured as
