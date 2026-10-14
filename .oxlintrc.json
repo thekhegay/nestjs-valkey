@@ -39,7 +39,13 @@
         "import/no-unassigned-import": "off",
         "import/no-named-as-default-member": "off",
         "unicorn/consistent-function-scoping": "off",
-        "vitest/valid-title": "off"
+        "vitest/valid-title": "off",
+        "vitest/valid-expect": [
+          "error",
+          {
+            "maxArgs": 2
+          }
+        ]
       }
     }
   ],
