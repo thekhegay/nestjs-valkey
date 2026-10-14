@@ -1,0 +1,5 @@
+updateNotifier: false
+
+allowBuilds:
+  # A postinstall that only prints; glide loads its compiled protobuf code as is.
+  protobufjs: false
