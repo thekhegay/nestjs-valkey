@@ -29,5 +29,6 @@ describe('scripts', () => {
     const source = locks.ACQUIRE.source;
     expect(source.indexOf("redis.call('GET', KEYS[2])")).toBeLessThan(source.indexOf("redis.call('SET'"));
     expect(source.indexOf("redis.call('TIME')")).toBeLessThan(source.indexOf("redis.call('SET'"));
+    expect(source.indexOf('redis.error_reply(')).toBeLessThan(source.indexOf("redis.call('SET'"));
   });
 });

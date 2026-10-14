@@ -76,6 +76,9 @@ export class ValkeyLockStore implements LockStore, OnModuleInit {
     if (typeof reply === 'number' && Number.isSafeInteger(reply) && reply >= 1) {
       return { acquired: true, fencingToken: reply };
     }
+    // Anything but 0 may mean the script took the lock: free it (only if `owner` holds it) rather
+    // than leave it held by nobody until its ttl runs out. Best-effort: its outcome is ignored.
+    await this.#run(RELEASE, [lock], [owner]).catch(() => undefined);
     throw new ValkeyStoreError(ACQUIRE.name, `unexpected reply (${describeReply(reply)})`);
   }
 

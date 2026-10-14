@@ -10,6 +10,11 @@ import { defineScript } from '../internal/script.js';
  * or 0 when a live lock holds the key. Every read comes before the first write, so an error
  * (WRONGTYPE on foreign data under the fence key) leaves nothing behind.
  *
+ * A fence is the decimal integer this script writes. One that is anything else (foreign data,
+ * `1.5`, `0x10`), or at least 2^53 - 2, is refused with an error before the first write, so every
+ * token stays below `Number.MAX_SAFE_INTEGER` and one more than it is still exact. Refused after
+ * the write instead, the lock would be held by nobody until its ttl ran out.
+ *
  * The token is the server's clock in microseconds, or one more than the key's last token when
  * that is ahead: it grows across releases and expiries while the fence lives, whatever the clocks
  * do. The fence expires `retention + ahead` ms after the acquisition, `ahead` being how far the
@@ -23,9 +28,15 @@ end
 local now = redis.call('TIME')
 local clock = tonumber(now[1]) * 1000000 + tonumber(now[2])
 local token = clock
-local last = tonumber(redis.call('GET', KEYS[2]))
-if last and last >= token then
-  token = last + 1
+local fence = redis.call('GET', KEYS[2])
+if fence then
+  local last = string.match(fence, '^%d+$') and tonumber(fence)
+  if not last or last >= 9007199254740990 then
+    return redis.error_reply('ERR locks.acquire: the fence holds no token this store can extend (not a decimal integer, or at least 2^53 - 2)')
+  end
+  if last >= token then
+    token = last + 1
+  end
 end
 local ahead = math.ceil((token - clock) / 1000)
 redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])

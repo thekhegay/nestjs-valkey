@@ -3,6 +3,7 @@ import { GlideClient, Decoder } from '@valkey/valkey-glide';
 import type { Cluster, Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { glideRunner } from '../../src/glide/index.js';
+import { ValkeyStoreError } from '../../src/index.js';
 import { hashTag } from '../../src/internal/keys.js';
 import { ValkeyLockStore, type ValkeyLockStoreOptions } from '../../src/locks/index.js';
 import { admin, coreTargets, env, missing, type Connection } from '../support/servers.js';
@@ -99,6 +100,27 @@ for (const target of coreTargets()) {
         tokens.push(await token(locks, key, `o-${i}`));
       }
       for (let i = 1; i < tokens.length; i++) expect(tokens[i]!).toBeGreaterThan(tokens[i - 1]!);
+    });
+
+    it('refuses a fence it cannot extend before the first write, and leaves that fence as it was', async () => {
+      const locks = store();
+      const unreadable = ['1.5', 'abc', '0x10', '-5', '', '1e3', String(2 ** 53 - 2), String(2 ** 53 - 1)];
+      for (const fence of [...unreadable, '9007199254740993', '1'.repeat(400)]) {
+        const key = randomUUID();
+        await server.set(`${lockKey(key)}:fence`, fence, 'PX', 60_000);
+        const error = await locks.acquire(key, 'a', 10_000).catch((e: unknown) => e);
+        expect(error, fence).toBeInstanceOf(Error);
+        expect(error, fence).not.toBeInstanceOf(ValkeyStoreError);
+        expect(String((error as Error).message), fence).toMatch(/locks\.acquire: the fence holds no token/);
+        expect(String((error as Error).message), fence).not.toContain(key);
+        expect(await server.exists(lockKey(key)), fence).toBe(0);
+        expect(await server.get(`${lockKey(key)}:fence`), fence).toBe(fence);
+      }
+      // The highest fence it extends gives 2^53 - 2, a safe integer.
+      const key = randomUUID();
+      await server.set(`${lockKey(key)}:fence`, String(2 ** 53 - 3), 'PX', 60_000);
+      expect(await token(locks, key, 'a')).toBe(2 ** 53 - 2);
+      expect(await server.get(`${lockKey(key)}:fence`)).toBe(String(2 ** 53 - 2));
     });
 
     it("hands out tokens far above any value the documentation's shared counter reaches", async () => {

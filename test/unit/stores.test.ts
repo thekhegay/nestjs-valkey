@@ -36,7 +36,9 @@ describe('ValkeyLockStore', () => {
 
   it('reads a token from bytes or a bigint, and refuses a reply it never sends', async () => {
     const replies: unknown[] = [Buffer.from('7'), 7n];
-    const store = new ValkeyLockStore(fakeRunner(() => replies.shift()));
+    const store = new ValkeyLockStore(
+      fakeRunner(({ script }) => (script.name === 'locks.acquire' ? replies.shift() : 1)),
+    );
     await expect(store.acquire('k', 'o', 1)).rejects.toThrow(ValkeyStoreError);
     await expect(store.acquire('k', 'o', 1)).resolves.toEqual({ acquired: true, fencingToken: 7 });
     for (const reply of [-1, 1.5, 2 ** 53, null, 'secret', [1]]) {
@@ -52,6 +54,31 @@ describe('ValkeyLockStore', () => {
     await expect(new ValkeyLockStore(fakeRunner(() => '1')).release('k', 'o')).rejects.toThrow(
       ValkeyStoreError,
     );
+  });
+
+  it('releases best-effort before refusing a reply it cannot read, since the script may have taken the lock', async () => {
+    const releases: (() => unknown)[] = [
+      () => 1,
+      () => 0,
+      () => 'not a flag',
+      () => {
+        throw new Error('Connection is closed.');
+      },
+    ];
+    for (const release of releases) {
+      const runner = fakeRunner(({ script }) => (script.name === 'locks.acquire' ? 2 ** 53 : release()));
+      const error = await new ValkeyLockStore(runner).acquire('k', 'o', 1).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ValkeyStoreError);
+      expect((error as ValkeyStoreError).script).toBe('locks.acquire');
+      expect(runner.calls.map(({ script, keys, args }) => [script.name, keys, args])).toEqual([
+        ['locks.acquire', ['locks:{k}', 'locks:{k}:fence'], ['o', '1', '3600000']],
+        ['locks.release', ['locks:{k}'], ['o']],
+      ]);
+    }
+    // A refusal (0) is a readable reply: nothing to release.
+    const refused = fakeRunner(() => 0);
+    await expect(new ValkeyLockStore(refused).acquire('k', 'o', 1)).resolves.toEqual({ acquired: false });
+    expect(refused.calls).toHaveLength(1);
   });
 
   it('refuses bad arguments before reaching the server', async () => {

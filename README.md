@@ -143,7 +143,10 @@ The stores retry nothing (but resend a script on `NOSCRIPT`), set no timers and 
 timeouts, `NOPERM`, `OOM`, `READONLY` reach you as the client threw them. Bad arguments (a duration that is not a
 whole number of milliseconds, a key with a lone surrogate, a prefix with a brace) throw before any call. A reply
 the store cannot read, such as an idempotency record it did not write, throws `ValkeyStoreError` from
-`nestjs-valkey`; the message never names a key, an owner or a stored response. The scripts carry no `#!lua`
+`nestjs-valkey`; the message never names a key, an owner or a stored response. `acquire()` that gets such a reply
+releases the lock first (if it holds it), best-effort. A fence key that holds anything but a token the store wrote,
+or one at 2^53 - 2 or above, fails `acquire()` with the script's own error (`locks.acquire: the fence holds no
+token this store can extend`) before anything is written. The scripts carry no `#!lua`
 flags, so under memory pressure only the writes that grow memory (`acquire()`, `complete()`) are refused, never
 `renew()`, `release()` or `extend()`.
 
