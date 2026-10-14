@@ -194,6 +194,7 @@ pnpm servers:up          # Valkey standalone, a 3-primary cluster, Sentinel (Doc
 pnpm test                # unit tests, no server
 pnpm test:servers        # contracts, cluster, tokens, NOSCRIPT, ACL, OOM, Nest apps
 pnpm test:consumers      # packs the package into a Nest 11 CommonJS and a Nest 12 ESM application
+pnpm test:chaos          # CLUSTER FAILOVER under load: tokens must keep growing (reshuffles the cluster)
 pnpm servers:down
 ```
 
