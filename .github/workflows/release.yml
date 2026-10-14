@@ -1,0 +1,121 @@
+name: Release
+
+# Publishes when a `chore(release): vX.Y.Z` commit lands on main. The bump
+# itself goes through a pull request like any other change - release-pr.yml
+# cuts it from the Actions tab - so nothing here pushes to a protected branch:
+# the tag is all this workflow writes.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# SHA-pinned because this workflow holds the npm OIDC token; keep the version comments.
+jobs:
+  release:
+    name: Tag, release and publish
+    runs-on: ubuntu-latest
+    if: "${{ startsWith(github.event.head_commit.message, 'chore(release): v') }}"
+
+    permissions:
+      contents: write
+      id-token: write
+      # The release body names the pull request behind each entry.
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # No dependency cache: this job holds the npm OIDC token, and a poisoned
+      # cache would hand it to whatever the cache restores.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          package-manager-cache: false
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      # The unit suite only: the Docker-backed suites ran on the release pull
+      # request, whose CI this commit has to pass before it can merge.
+      - run: pnpm test
+
+      # 11.15.0 is where `npm stage` arrived; trusted publishing needs 11.5.1.
+      - name: Assert npm supports staged trusted publishing
+        run: |
+          floor=11.15.0
+          have=$(npm --version)
+          echo "npm $have on node $(node --version)"
+          IFS=. read -r fa fb fc <<<"$floor"
+          IFS=. read -r ha hb hc <<<"${have%%-*}"
+          if (( ha < fa || (ha == fa && (hb < fb || (hb == fb && hc < fc))) )); then
+            echo "::error::npm $have is below the $floor floor for staged trusted publishing. Raise node-version, or install an exact npm version, never npm@latest."
+            exit 1
+          fi
+
+      - name: Read the version being released
+        id: bump
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          subject=$(git log -1 --pretty=%s)
+          if [[ "$subject" != "chore(release): v$version"* ]]; then
+            echo "::error::Commit says '$subject' and package.json says $version. They have to agree."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "::error::Tag v$version already exists on origin."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      # A feat or fix merged after the release pull request was cut would ship
+      # with no line in CHANGELOG.md. The cure is Release PR again, same bump.
+      - name: Check the changelog names everything that ships
+        run: pnpm release:check
+
+      # Builds, then publint, attw and the tarball check on what gets staged.
+      - run: pnpm check:package
+
+      - name: Write the release body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm release:body "--output=$RUNNER_TEMP/release-body.md"
+
+      # Staged, not direct: the trusted publisher deliberately does not allow
+      # `npm publish`, so a compromised run cannot put a version in front of
+      # users. The release is live once a maintainer approves it with 2FA,
+      # either on npmjs.com or with `npm stage approve`.
+      - name: Stage the release on npm
+        run: npm stage publish --access public --provenance
+
+      # Tagged after the publish: a tag naming a version npm rejected is worse
+      # than no tag, because the next attempt would refuse to reuse it.
+      - name: Tag the release
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "${{ steps.bump.outputs.tag }}" -m "${{ steps.bump.outputs.tag }}"
+          git push origin "${{ steps.bump.outputs.tag }}"
+
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          tag_name: ${{ steps.bump.outputs.tag }}
+          name: ${{ steps.bump.outputs.tag }}
+          body_path: ${{ runner.temp }}/release-body.md
+          make_latest: true
+          token: ${{ secrets.GITHUB_TOKEN }}
