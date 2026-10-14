@@ -32,8 +32,12 @@ describe('scripts', () => {
 
   it('read everything in acquire() before the first write', () => {
     const source = locks.ACQUIRE.source;
+    expect(source).toContain("redis.call('GET', KEYS[2])");
     expect(source.indexOf("redis.call('GET', KEYS[2])")).toBeLessThan(source.indexOf("redis.call('SET'"));
+    expect(source).toContain("redis.call('TIME')");
     expect(source.indexOf("redis.call('TIME')")).toBeLessThan(source.indexOf("redis.call('SET'"));
+    // indexOf() is -1 for a missing call, which is less than anything: assert presence first.
+    expect(source).toContain('redis.error_reply(');
     expect(source.indexOf('redis.error_reply(')).toBeLessThan(source.indexOf("redis.call('SET'"));
   });
 });
