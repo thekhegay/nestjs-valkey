@@ -46,8 +46,9 @@ export async function runServerCheck(runner: ScriptRunner, options: ServerCheckO
   if (mode === false) return;
   const logger = options.logger ?? new Logger(store);
   const problem = (message: string, cause?: unknown): void => {
-    if (mode === 'strict')
+    if (mode === 'strict') {
       throw new Error(`${store}: ${message}`, cause === undefined ? undefined : { cause });
+    }
     logger.warn(message);
   };
 
