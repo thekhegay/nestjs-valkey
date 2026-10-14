@@ -1,4 +1,4 @@
-import { BaseClient, Decoder, Script, type GlideClient, type GlideClusterClient } from '@valkey/valkey-glide';
+import { BaseClient, Decoder, Script } from '@valkey/valkey-glide';
 import type { ScriptRunner } from '../internal/types.js';
 
 // glide keeps a Script's code in a process-wide native container that is never garbage
@@ -7,15 +7,16 @@ import type { ScriptRunner } from '../internal/types.js';
 const compiled = new Map<string, Script>();
 
 /**
- * A `ScriptRunner` over a `GlideClient` or `GlideClusterClient`. `invokeScript` sends EVALSHA and
- * loads the script itself on NOSCRIPT; a cluster client routes by the keys, and the probe (no
- * keys) goes to any node. Every call decodes the reply as strings, whatever `defaultDecoder` the
- * application's client has. The runner never closes the client.
+ * A `ScriptRunner` over a `GlideClient` or `GlideClusterClient`, or either typed as the
+ * `BaseClient` both extend. `invokeScript` sends EVALSHA and loads the script itself on NOSCRIPT;
+ * a cluster client routes by the keys, and the probe (no keys) goes to any node. Every call
+ * decodes the reply as strings, whatever `defaultDecoder` the application's client has. The
+ * runner never closes the client.
  *
  * Set `requestTimeout` above the slowest healthy script call and below `@nestjs/idempotency`'s
  * `storeTimeout`: glide's default, 250 ms, is shorter than a failover.
  */
-export function glideRunner(client: GlideClient | GlideClusterClient): ScriptRunner {
+export function glideRunner(client: BaseClient): ScriptRunner {
   if (!(client instanceof BaseClient)) {
     throw new TypeError(
       'glideRunner() takes a GlideClient or GlideClusterClient from the copy of @valkey/valkey-glide ' +

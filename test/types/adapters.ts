@@ -1,5 +1,5 @@
 // Compile-time checks, run by `pnpm typecheck`: which clients each adapter accepts.
-import type { GlideClient, GlideClusterClient } from '@valkey/valkey-glide';
+import type { BaseClient, GlideClient, GlideClusterClient } from '@valkey/valkey-glide';
 import type { Cluster, Redis } from 'ioredis';
 import type { Cluster as Ioredis5Cluster, Redis as Ioredis5 } from 'ioredis5';
 import type { Cluster as IovalkeyCluster, Valkey } from 'iovalkey';
@@ -21,6 +21,8 @@ declare const valkeyCluster: IovalkeyCluster;
 declare const docsClient: RedisEval;
 declare const glide: GlideClient;
 declare const glideCluster: GlideClusterClient;
+/** Either client, typed as the base both extend, as an application's provider may type it. */
+declare const glideBase: BaseClient;
 
 export const runners: ScriptRunner[] = [
   ioredisRunner(redis6),
@@ -32,6 +34,7 @@ export const runners: ScriptRunner[] = [
   ioredisRunner(docsClient),
   glideRunner(glide),
   glideRunner(glideCluster),
+  glideRunner(glideBase),
   // @ts-expect-error a glide client has no eval(): it takes glideRunner()
   ioredisRunner(glide),
   // @ts-expect-error an ioredis client is not a glide client

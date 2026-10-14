@@ -26,7 +26,7 @@ Valkey 7.2+ or Redis 7.0+.
 or close a connection: you hand them a runner over your client, and close the client in your module's
 `onApplicationShutdown()`.
 
-With glide (a cluster here; `GlideClient` works the same):
+With glide (a cluster here; `GlideClient`, or either typed as their `BaseClient`, works the same):
 
 ```ts
 import { Module } from '@nestjs/common';
