@@ -1,0 +1,79 @@
+# The servers the tests run against. `pnpm servers:up` starts them and waits until each is
+# healthy; docker/servers.env holds the addresses the tests read. Every port is bound to
+# 127.0.0.1. `VALKEY_IMAGE` picks the Valkey version (CI runs 8.1 and 9.1).
+name: nvk-test
+
+x-valkey: &valkey
+  image: ${VALKEY_IMAGE:-valkey/valkey:9.1-alpine}
+  init: true
+
+services:
+  valkey:
+    <<: *valkey
+    container_name: nvk-test-valkey
+    command: valkey-server --port 16379 --save '' --appendonly no
+    ports: ['127.0.0.1:16379:16379']
+    healthcheck:
+      test: ['CMD', 'valkey-cli', '-p', '16379', 'ping']
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # A server whose configuration the tests change: ACL users, maxmemory and its policy.
+  scratch:
+    <<: *valkey
+    container_name: nvk-test-scratch
+    command: valkey-server --port 16381 --save '' --appendonly no
+    ports: ['127.0.0.1:16381:16381']
+    healthcheck:
+      test: ['CMD', 'valkey-cli', '-p', '16381', 'ping']
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  cluster:
+    <<: *valkey
+    container_name: nvk-test-cluster
+    command: ['sh', '/nvk/cluster.sh']
+    volumes: ['./cluster.sh:/nvk/cluster.sh:ro']
+    ports: ['127.0.0.1:17101-17106:17101-17106']
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          for p in 17101 17102 17103 17104 17105 17106; do
+          valkey-cli -p $$p cluster info | grep -q cluster_state:ok || exit 1; done;
+          [ "$$(valkey-cli -p 17101 cluster nodes | grep -c connected)" = 6 ]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+
+  sentinel:
+    <<: *valkey
+    container_name: nvk-test-sentinel
+    command: ['sh', '/nvk/sentinel.sh']
+    volumes: ['./sentinel.sh:/nvk/sentinel.sh:ro']
+    ports: ['127.0.0.1:17201-17203:17201-17203']
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          valkey-cli -p 17202 info replication | grep -q master_link_status:up &&
+          valkey-cli -p 17203 sentinel replicas nvk | grep -q 17202
+      interval: 1s
+      timeout: 3s
+      retries: 60
+
+  # Redis 7.0, the oldest server the package claims: `docker compose --profile redis up`.
+  redis:
+    profiles: [redis]
+    image: ${REDIS_IMAGE:-redis:7.0-alpine}
+    init: true
+    container_name: nvk-test-redis
+    command: redis-server --port 16380 --save '' --appendonly no
+    ports: ['127.0.0.1:16380:16380']
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-p', '16380', 'ping']
+      interval: 1s
+      timeout: 3s
+      retries: 30
