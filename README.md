@@ -67,9 +67,10 @@ valkeyLockStore({
 `@nestjs/locks` bounds no store call, so `acquire()` and `release()` against a server that stops answering wait as
 long as the client does; `ioredisRunner()` warns when the client has no `commandTimeout`. Keep that connection
 apart from one that runs `XREADGROUP BLOCK` or `BLPOP`: a `commandTimeout` applies to blocking commands too
-(`redis.duplicate({ commandTimeout: 2000 })` makes one). For glide, set `requestTimeout` above the slowest
-healthy script call and below `@nestjs/idempotency`'s `storeTimeout` (10 s): the default, 250 ms, is shorter than
-a failover.
+(`redis.duplicate({ commandTimeout: 2000 })` makes one). `ioredisRunner()` refuses a client with `stringNumbers`,
+whose integer replies the stores cannot read, and `duplicate()` copies that option: pass `stringNumbers: false`
+there if the client you start from has it. For glide, set `requestTimeout` above the slowest healthy script call
+and below `@nestjs/idempotency`'s `storeTimeout` (10 s): the default, 250 ms, is shorter than a failover.
 
 Outside Nest, or as a class in your own code:
 

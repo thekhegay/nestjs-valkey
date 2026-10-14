@@ -198,6 +198,34 @@ describe(
       expect(String(warn.mock.calls[0]![0])).toMatch(/Grant \+info/);
     });
 
+    it('refuses an ioredis client with stringNumbers before any call, and runs on its duplicate without it', async () => {
+      const parent = new Redis({ ...env.scratch!, commandTimeout: 5_000, stringNumbers: true });
+      closers.push(() => parent.disconnect());
+      // The scripts' integer replies, as such a client returns them.
+      expect(await parent.eval('return {1, 0}', 0)).toEqual(['1', '0']);
+      const key = randomUUID();
+      expect(() => new ValkeyLockStore(ioredisRunner(parent))).toThrow(/stringNumbers/);
+      const inherited = parent.duplicate();
+      closers.push(() => inherited.disconnect());
+      expect(() => ioredisRunner(inherited)).toThrow(/stringNumbers/);
+      expect(await server.exists(`locks:{${hashTag(key)}}`, `idem:${key}`)).toBe(0);
+
+      const client = parent.duplicate({ stringNumbers: false });
+      closers.push(() => client.disconnect());
+      const runner = ioredisRunner(client);
+      const locks = new ValkeyLockStore(runner, { startupCheck: 'strict' });
+      await locks.checkServer();
+      expect((await locks.acquire(key, 'a', 60_000)).acquired).toBe(true);
+      expect(await locks.acquire(key, 'b', 60_000)).toEqual({ acquired: false });
+      expect(await locks.renew(key, 'a', 60_000)).toBe(true);
+      expect(await locks.release(key, 'a')).toBe(true);
+      const idem = new ValkeyIdempotencyStore(runner, { startupCheck: 'strict' });
+      expect(await idem.acquire(key, 'a', 'fp', 60_000)).toEqual({ state: 'acquired' });
+      expect(await idem.acquire(key, 'b', 'fp', 60_000)).toEqual({ state: 'in-flight', fingerprint: 'fp' });
+      expect(await idem.release(key, 'a')).toBe(true);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
     it('works inside an ACL key pattern, and passes NOPERM through for a key outside it', async () => {
       const { runners } = await as([...SERVICE_GRANTS, '+time']);
       for (const [name, runner] of runners) {

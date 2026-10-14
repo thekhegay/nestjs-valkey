@@ -79,6 +79,32 @@ describe('ioredisRunner()', () => {
     for (const client of clients) (client as { disconnect?(): void }).disconnect?.();
   });
 
+  it('refuses a client with stringNumbers, for Redis and Cluster of every flavour and for a duplicate', () => {
+    const at = [{ host: '127.0.0.1', port: 1 }];
+    const redisOptions = { commandTimeout: 2000, stringNumbers: true };
+    const parent = new Redis({ lazyConnect: true, stringNumbers: true });
+    const clients = [
+      new Redis({ lazyConnect: true, ...redisOptions }),
+      new Ioredis5({ lazyConnect: true, ...redisOptions }),
+      new Valkey({ lazyConnect: true, ...redisOptions }),
+      new Cluster(at, { lazyConnect: true, redisOptions }),
+      new Ioredis5Cluster(at, { lazyConnect: true, redisOptions }),
+      new IovalkeyCluster(at, { lazyConnect: true, redisOptions }),
+      // duplicate() copies the option from the client it is made from.
+      parent.duplicate({ commandTimeout: 2000 }),
+    ];
+    for (const client of clients) {
+      expect(() => ioredisRunner(client)).toThrow(TypeError);
+      expect(() => ioredisRunner(client)).toThrow(/stringNumbers/);
+      client.disconnect();
+    }
+    const fixed = parent.duplicate({ commandTimeout: 2000, stringNumbers: false });
+    expect(() => ioredisRunner(fixed)).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
+    fixed.disconnect();
+    parent.disconnect();
+  });
+
   it('sends EVALSHA with every key counted, and EVAL with the source on NOSCRIPT only', async () => {
     const evalsha = vi.fn(async () => {
       throw Object.assign(new Error('NOSCRIPT No matching script. Please use EVAL.'), { name: 'ReplyError' });

@@ -9,7 +9,13 @@ import type { ScriptRunner } from '../internal/types.js';
 export interface IoredisLike {
   eval(script: string, numkeys: number, ...args: string[]): Promise<unknown>;
   evalsha?(sha1: string, numkeys: number, ...args: string[]): Promise<unknown>;
-  readonly options?: { commandTimeout?: number; redisOptions?: { commandTimeout?: number } };
+  readonly options?: ConnectionOptions & { redisOptions?: ConnectionOptions };
+}
+
+/** The options of a `Redis`, or a `Cluster`'s `redisOptions`, that the runner reads. */
+interface ConnectionOptions {
+  commandTimeout?: number;
+  stringNumbers?: boolean;
 }
 
 /**
@@ -23,13 +29,26 @@ export interface IoredisLike {
  * `release()` against a server that stops answering wait as long as the client does. The runner
  * warns once when the client has none. A `commandTimeout` also applies to blocking commands, so
  * give the stores a connection of their own: `redis.duplicate({ commandTimeout: 2000 })`.
+ *
+ * A client with `stringNumbers` (or a `Cluster` with it in `redisOptions`) is refused: it returns
+ * the scripts' integer replies as strings, which the stores cannot read once the script has run.
+ * `duplicate()` copies it, so pass `stringNumbers: false` there.
  */
 export function ioredisRunner(client: IoredisLike): ScriptRunner {
   if (client == null || typeof client.eval !== 'function') {
     throw new TypeError('ioredisRunner() takes an ioredis or iovalkey client (Redis or Cluster)');
   }
   const options = client.options;
-  const timeout = options?.redisOptions ? options.redisOptions.commandTimeout : options?.commandTimeout;
+  // A Cluster's connections take redisOptions, not the cluster's own options.
+  const connection = options?.redisOptions ?? options;
+  if (connection?.stringNumbers) {
+    throw new TypeError(
+      'ioredisRunner(): the client has stringNumbers set, which returns integer replies as strings, so every ' +
+        'store call would fail after its script ran. Give the stores a client without it: ' +
+        'redis.duplicate({ stringNumbers: false, commandTimeout: 2000 })',
+    );
+  }
+  const timeout = connection?.commandTimeout;
   if (options && timeout == null) {
     new Logger('nestjs-valkey').warn(
       'ioredisRunner(): the client has no commandTimeout, and @nestjs/locks bounds no store call: ' +

@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import type { Cluster } from 'ioredis';
+import { Cluster } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ValkeyIdempotencyStore } from '../../src/idempotency/index.js';
 import { hashTag } from '../../src/internal/keys.js';
+import { ioredisRunner } from '../../src/ioredis/index.js';
 import { ValkeyLockStore } from '../../src/locks/index.js';
 import { DOCS_LOCK_ACQUIRE } from '../support/docs-recipes.js';
 import { recording } from '../support/recording.js';
 import {
   admin,
+  env,
   glideCluster,
   ioredisCluster,
   missing,
@@ -121,4 +123,16 @@ describe(`in a cluster${skip ? ` (skipped: ${skip})` : ''}`, { skip: skip !== fa
       }
     });
   }
+
+  it('refuses an ioredis Cluster whose node connections return integers as strings (redisOptions.stringNumbers)', async () => {
+    const cluster = new Cluster(env.cluster!, {
+      redisOptions: { commandTimeout: 5_000, stringNumbers: true },
+    });
+    try {
+      expect(await cluster.eval('return 1', 1, randomUUID())).toBe('1');
+      expect(() => ioredisRunner(cluster)).toThrow(/stringNumbers/);
+    } finally {
+      cluster.disconnect();
+    }
+  });
 });
