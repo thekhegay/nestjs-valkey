@@ -111,6 +111,16 @@ describe(
         await run(join(dir, 'node_modules/.bin/tsc'), ['-p', 'tsconfig.nodenext.json'], { cwd: dir });
       });
 
+      it('also type-checks with TypeScript 6.0 on the same "module": "commonjs" tsconfig', async () => {
+        await run(
+          process.execPath,
+          [join(dir, 'node_modules/typescript6/bin/tsc'), '-p', 'tsconfig.json', '--noEmit'],
+          {
+            cwd: dir,
+          },
+        );
+      });
+
       it('needs typesVersions for node10 resolution (the control: without it, TS2307)', async () => {
         const path = join(dir, 'node_modules/nestjs-valkey/package.json');
         const original = await readFile(path, 'utf8');
