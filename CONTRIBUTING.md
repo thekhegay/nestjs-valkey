@@ -27,8 +27,7 @@ pnpm lint
 pnpm check:package    # publint, attw and the tarball contents
 ```
 
-Set `REDIS_URL` (and `pnpm servers:up --profile redis`, which starts Redis on
-16380) to run the server suite against Redis as well. A change to a script needs
+Set `REDIS_URL` (and `pnpm servers:up --profile redis`, which starts Redis on 16380) to run the server suite against Redis as well. A change to a script needs
 a test that fails without it on a real server; a green test that would stay
 green with the fix removed proves nothing.
 
