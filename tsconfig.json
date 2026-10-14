@@ -12,7 +12,8 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "experimentalDecorators": true
   },
   "include": ["src", "test", "vitest.config.ts"],
   "exclude": ["test/consumers/fixtures"]

@@ -11,15 +11,34 @@
     "typescript/no-explicit-any": "error",
     "unicorn/prefer-node-protocol": "error",
     "import/no-cycle": "error",
-    "eqeqeq": ["error", "always", { "null": "ignore" }],
-    "no-console": "error"
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "no-console": "error",
+    "typescript/no-extraneous-class": [
+      "error",
+      {
+        "allowWithDecorator": true
+      }
+    ]
   },
   "overrides": [
     {
       "files": ["test/**", "*.config.ts"],
       "rules": {
         "no-console": "off",
-        "typescript/no-explicit-any": "off"
+        "typescript/no-explicit-any": "off",
+        "no-await-in-loop": "off",
+        "vitest/require-mock-type-parameters": "off",
+        "vitest/no-conditional-expect": "off",
+        "vitest/expect-expect": "off",
+        "import/no-unassigned-import": "off",
+        "import/no-named-as-default-member": "off",
+        "unicorn/consistent-function-scoping": "off"
       }
     }
   ],
