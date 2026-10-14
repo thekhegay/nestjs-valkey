@@ -25,12 +25,12 @@ describe('ValkeyLockStore', () => {
     ]);
   });
 
-  it('defaults to the locks: prefix and an hour of fence retention', async () => {
+  it('defaults to the locks: prefix and a minute of fence retention', async () => {
     const runner = fakeRunner(() => 0);
     await expect(new ValkeyLockStore(runner).acquire('', 'o', 1)).resolves.toEqual({ acquired: false });
     expect(runner.calls[0]).toMatchObject({
       keys: ['locks:{%}', 'locks:{%}:fence'],
-      args: ['o', '1', '3600000'],
+      args: ['o', '1', '60000'],
     });
   });
 
@@ -71,7 +71,7 @@ describe('ValkeyLockStore', () => {
       expect(error).toBeInstanceOf(ValkeyStoreError);
       expect((error as ValkeyStoreError).script).toBe('locks.acquire');
       expect(runner.calls.map(({ script, keys, args }) => [script.name, keys, args])).toEqual([
-        ['locks.acquire', ['locks:{k}', 'locks:{k}:fence'], ['o', '1', '3600000']],
+        ['locks.acquire', ['locks:{k}', 'locks:{k}:fence'], ['o', '1', '60000']],
         ['locks.release', ['locks:{k}'], ['o']],
       ]);
     }

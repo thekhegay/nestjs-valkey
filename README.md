@@ -90,7 +90,7 @@ export class AppLockStore extends ValkeyLockStore {
 ```
 
 Options: `prefix` (default `locks:` and `idem:`; give every application on a shared server its own, inside its
-ACL key pattern), `fenceRetention` for the lock store (ms, default an hour, see below) and `startupCheck`.
+ACL key pattern), `fenceRetention` for the lock store (ms, default a minute, see below) and `startupCheck`.
 
 ## Cluster
 
@@ -108,6 +108,20 @@ token when that is ahead, so tokens grow per key across releases, expiries and c
 lives, and after it expires across a clock that reads less than `fenceRetention` behind. They are safe integers,
 but too large for a 32-bit column: store them as `bigint`. They are comparable per key only, as the contract
 asks, and they do not start at 1.
+
+The fence matters only for a clock that steps back. While it lives, tokens grow whatever the clock does; once it
+has expired, a server clock (or, after a failover, the new primary's) that reads more than `fenceRetention` behind
+the last token hands out a smaller one. The default, a minute, is many times what a clock under NTP steps back (a
+leap second, a correction of a second or so) and the skew NTP leaves between a primary and its replicas
+(milliseconds). Raise it where a clock can be minutes off: no NTP, a hardware clock kept in local time, VMs
+restored from a snapshot.
+
+Every key acquired within `fenceRetention` keeps its fence, and `noeviction` never frees one early. Measured as
+`used_memory` growth over 100 000 fences named `locks:{<uuid>}:fence` (50 bytes): 108 bytes each on Valkey 8.1,
+124 on Valkey 9.1, 141 on Valkey 7.2 and Redis 7.0 (`MEMORY USAGE` reports 80 to 96: it leaves out the key's
+share of the keyspace and expiry tables); a longer prefix or key adds its length. An application that locks 1 000 distinct keys a
+second holds 60 000 fences at the default, 6.5 to 8.5 MB, and 3.6 million at an hour, 390 to 510 MB. Locks on a
+few fixed names (`@Locked('jobs:export')`) cost a few kilobytes either way.
 
 ## Server requirements
 

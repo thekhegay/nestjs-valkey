@@ -19,7 +19,9 @@ export interface ValkeyLockStoreOptions {
   /**
    * How long a key's fencing record outlives its last acquisition, in ms (a positive integer).
    * Tokens stay monotonic across any clock shift while the record lives; after it expires, across
-   * a server clock that reads less than this behind. Default `3_600_000` (an hour).
+   * a server clock (or, after a failover, a replica's) that reads less than this behind. Default
+   * `60_000` (a minute), many times what a clock under NTP steps back (a leap second, a correction
+   * of a second or so). Every key acquired within it keeps a record of 110 to 140 bytes.
    */
   fenceRetention?: number;
   /** `'warn'` (default), `'strict'`, or `false`. See `checkServer()`. */
@@ -50,7 +52,7 @@ export class ValkeyLockStore implements LockStore, OnModuleInit {
     if (runner == null || typeof runner.run !== 'function') {
       throw new TypeError(`${STORE}: the first argument must be a ScriptRunner, such as glideRunner(client)`);
     }
-    const { prefix = 'locks:', fenceRetention = 3_600_000, startupCheck = 'warn' } = options;
+    const { prefix = 'locks:', fenceRetention = 60_000, startupCheck = 'warn' } = options;
     checkPrefix(STORE, prefix);
     checkDuration(STORE, 'fenceRetention', fenceRetention);
     if (startupCheck !== 'warn' && startupCheck !== 'strict' && startupCheck !== false) {
