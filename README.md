@@ -232,7 +232,7 @@ pnpm servers:down
 ```
 
 `docker compose -f docker/compose.yml --profile redis up -d` adds Redis 7.0; set `REDIS_URL=redis://127.0.0.1:16380`
-to run the contracts on it. `CONSUMER_NODES="22.12=/path/to/node,26=/path/to/node"` runs the consumer
+to run the contracts on it. `VALKEY_IMAGE=valkey/valkey:7.2-alpine` picks another Valkey (CI runs 7.2, 8.1 and 9.1). `CONSUMER_NODES="22.12=/path/to/node,26=/path/to/node"` runs the consumer
 applications on other Node versions.
 
 ## License

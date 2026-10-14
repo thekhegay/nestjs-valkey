@@ -1,6 +1,6 @@
 # The servers the tests run against. `pnpm servers:up` starts them and waits until each is
 # healthy; docker/servers.env holds the addresses the tests read. Every port is bound to
-# 127.0.0.1. `VALKEY_IMAGE` picks the Valkey version (CI runs 8.1 and 9.1).
+# 127.0.0.1. `VALKEY_IMAGE` picks the Valkey version (CI runs 7.2, 8.1 and 9.1).
 name: nvk-test
 
 x-valkey: &valkey
