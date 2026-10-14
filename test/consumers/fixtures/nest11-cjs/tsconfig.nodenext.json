@@ -1,0 +1,9 @@
+{
+  // The same CommonJS application under NodeNext resolution, which reads "exports".
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "noEmit": true
+  }
+}
