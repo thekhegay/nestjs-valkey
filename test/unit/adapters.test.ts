@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { BaseClient, Decoder } from '@valkey/valkey-glide';
+import { BaseClient, Decoder, GlideClient, GlideClusterClient } from '@valkey/valkey-glide';
 import { Cluster, Redis } from 'ioredis';
 import { Cluster as Ioredis5Cluster, Redis as Ioredis5 } from 'ioredis5';
 import { Cluster as IovalkeyCluster, Valkey } from 'iovalkey';
@@ -32,6 +32,39 @@ describe('glideRunner()', () => {
     expect(first![1]).toEqual({ keys: ['k'], args: ['a', '1'], decoder: Decoder.String });
     expect(first![1].keys).not.toBe(keys);
     expect((first![0] as { getHash(): string }).getHash()).toBe(script.sha1);
+  });
+
+  it('sends a keyless call (the startup probe) to a primary of a cluster, where invokeScript would pick any node', async () => {
+    const invokeScript = vi.fn(async () => 'keyed');
+    const invokeScriptWithRoute = vi.fn(async () => 'routed');
+    const cluster = Object.assign(Object.create(GlideClusterClient.prototype), {
+      invokeScript,
+      invokeScriptWithRoute,
+    });
+    const runner = glideRunner(cluster);
+    await expect(runner.run(script, [], ['a'])).resolves.toBe('routed');
+    expect(invokeScriptWithRoute).toHaveBeenCalledWith(expect.anything(), {
+      args: ['a'],
+      decoder: Decoder.String,
+      route: { type: 'primarySlotId', id: 0 },
+    });
+    await expect(runner.run(script, ['k'], ['a'])).resolves.toBe('keyed');
+    expect(invokeScript).toHaveBeenCalledWith(expect.anything(), {
+      keys: ['k'],
+      args: ['a'],
+      decoder: Decoder.String,
+    });
+    expect(invokeScriptWithRoute).toHaveBeenCalledTimes(1);
+
+    // A standalone client has one primary to send it to.
+    const standalone = Object.assign(Object.create(GlideClient.prototype), { invokeScript });
+    invokeScript.mockClear();
+    await glideRunner(standalone).run(script, [], []);
+    expect(invokeScript).toHaveBeenCalledWith(expect.anything(), {
+      keys: [],
+      args: [],
+      decoder: Decoder.String,
+    });
   });
 });
 

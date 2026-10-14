@@ -125,7 +125,8 @@ export class ValkeyIdempotencyStore implements IdempotencyStore, OnModuleInit {
    * `maxmemory-policy` other than `noeviction` (a `volatile-*` policy evicts these records too,
    * since each has an expiry), an unreadable `INFO` and a server that does not answer within 3 s
    * are warnings under `'warn'` and failures under `'strict'`. `false` skips it. In a cluster it
-   * reads one node. `onModuleInit()` calls it; call it yourself for a store created outside Nest.
+   * reads one primary. `onModuleInit()` calls it; call it yourself for a store created outside
+   * Nest.
    */
   checkServer(): Promise<void> {
     return runServerCheck(this.#runner, {

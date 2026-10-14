@@ -3,6 +3,7 @@ import { Cluster } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ValkeyIdempotencyStore } from '../../src/idempotency/index.js';
 import { hashTag } from '../../src/internal/keys.js';
+import { defineScript } from '../../src/internal/script.js';
 import { ioredisRunner } from '../../src/ioredis/index.js';
 import { ValkeyLockStore } from '../../src/locks/index.js';
 import { DOCS_LOCK_ACQUIRE } from '../support/docs-recipes.js';
@@ -121,6 +122,21 @@ describe(`in a cluster${skip ? ` (skipped: ${skip})` : ''}`, { skip: skip !== fa
         expect((await idem.acquire(key, 'a', 'fp', 10_000)).state).toBe('acquired');
         expect(await idem.complete(key, 'a', { status: 200, headers: {}, body: i }, 10_000)).toBe(true);
       }
+    });
+  }
+
+  // The probe reads one node's ACL and maxmemory-policy: a replica's may differ from the primaries'.
+  const ROLE = defineScript(
+    'test.role',
+    "return string.match(redis.call('INFO', 'replication'), 'role:(%a+)')",
+  );
+  for (const target of [glideCluster(), glideCluster('preferReplica'), ioredisCluster('ioredis', 'slave')]) {
+    it(`sends a keyless call, the startup probe, to a primary (${target.name})`, async () => {
+      const { runner } = await connect(target);
+      const roles = new Set<unknown>();
+      for (let i = 0; i < 60; i++) roles.add(await runner.run(ROLE, [], []));
+      expect(roles).toEqual(new Set(['master']));
+      await new ValkeyLockStore(runner, { startupCheck: 'strict' }).checkServer();
     });
   }
 

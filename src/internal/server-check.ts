@@ -4,9 +4,9 @@ import { defineScript } from './script.js';
 import type { ScriptRunner, StartupCheck } from './types.js';
 
 /**
- * No keys, so a cluster client sends it to any node. `pcall` turns an ACL refusal into a value
- * instead of an error. `CONFIG GET` is not allowed from a script, and a separate `CONFIG` call is
- * often closed on managed services, so the policy is read from `INFO memory`.
+ * No keys: in a cluster, the runner sends it to a primary. `pcall` turns an ACL refusal into a
+ * value instead of an error. `CONFIG GET` is not allowed from a script, and a separate `CONFIG`
+ * call is often closed on managed services, so the policy is read from `INFO memory`.
  */
 export const PROBE = defineScript(
   'server.probe',
@@ -39,7 +39,7 @@ export interface ServerCheckOptions {
  * ACL user may not run `TIME` always fails: every `acquire()` would fail inside the script, and
  * `ACL DRYRUN` cannot tell, since it checks only the outer `EVALSHA`. A `maxmemory-policy` other
  * than `noeviction`, an `INFO` the user may not run, and a server that does not answer are
- * warnings under `'warn'` and failures under `'strict'`. In a cluster the probe reads one node.
+ * warnings under `'warn'` and failures under `'strict'`. In a cluster the probe reads one primary.
  */
 export async function runServerCheck(runner: ScriptRunner, options: ServerCheckOptions): Promise<void> {
   const { store, mode, needsTime } = options;

@@ -74,6 +74,16 @@ whose integer replies the stores cannot read, and `duplicate()` copies that opti
 there if the client you start from has it. For glide, set `requestTimeout` above the slowest healthy script call
 and below `@nestjs/idempotency`'s `storeTimeout` (10 s): the default, 250 ms, is shorter than a failover.
 
+In a cluster, glide logs each `NOSCRIPT` (a replica promoted by a failover has no scripts cached) and each `MOVED`
+(a slot that moved) it recovers from as a `WARN` line on stdout, while the store call succeeds:
+
+```text
+2026-10-14T16:54:07.841326Z  WARN logger_core: cluster - Received request error An error was signalled by the server: - Moved: 8125 127.0.0.1:17105 on node "127.0.0.1:17102".
+```
+
+To quiet them, set glide's own logger once at startup: `Logger.setLoggerConfig('error')`, with `Logger` from
+`@valkey/valkey-glide` (`'off'` silences glide altogether).
+
 Outside Nest, or as a class in your own code:
 
 ```ts
@@ -139,8 +149,10 @@ few fixed names (`@Locked('jobs:export')`) cost a few kilobytes either way.
 
 ## Startup check
 
-The stores' `onModuleInit()` runs one keyless script through the runner (in a cluster, on one node) and waits
-at most 3 seconds:
+The stores' `onModuleInit()` runs one keyless script through the runner and waits at most 3 seconds. In a
+cluster it reads one primary, never a replica: `glideRunner()` sends it to the primary that serves slot 0,
+`ioredisRunner()` to any primary. Give every node the same ACL users and `maxmemory-policy`, since the check
+reads only that one:
 
 | Finding                                  | `'warn'` (default) | `'strict'`    |
 | ---------------------------------------- | ------------------ | ------------- |

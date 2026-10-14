@@ -9,8 +9,9 @@ export interface ValkeyScript {
 /**
  * Runs `script` atomically on the node that owns `keys` (always one slot) and resolves the
  * client's reply as is. Every key goes as a script key (numkeys), so a cluster client routes by
- * it. On NOSCRIPT it sends the source once (EVAL, or the client's own mechanism) and retries
- * nothing else: a call that failed may have run. It never closes the client.
+ * it; a call without keys (the startup probe) goes to a primary, whose ACL and policy it reads.
+ * On NOSCRIPT it sends the source once (EVAL, or the client's own mechanism) and retries nothing
+ * else: a call that failed may have run. It never closes the client.
  *
  * `glideRunner()` and `ioredisRunner()` are the two this package ships; any object with this
  * method works (a node-redis client, a wrapper that traces, a fake in an application's tests).
