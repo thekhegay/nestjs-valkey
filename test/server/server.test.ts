@@ -79,6 +79,7 @@ describe(
       const glide = await GlideClient.createClient({
         addresses: [env.scratch!],
         requestTimeout: 5_000,
+        advancedConfiguration: { connectionTimeout: 5_000 },
         ...(credentials && { credentials }),
       });
       const ioredis = new Redis({

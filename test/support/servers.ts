@@ -66,7 +66,11 @@ export const glideStandalone = (on: 'valkey' | 'redis' = 'valkey'): Target => ({
   cluster: false,
   async connect() {
     const at = on === 'valkey' ? env.standalone! : env.redis!;
-    const client = await GlideClient.createClient({ addresses: [at], requestTimeout: TIMEOUT });
+    const client = await GlideClient.createClient({
+      addresses: [at],
+      requestTimeout: TIMEOUT,
+      advancedConfiguration: { connectionTimeout: TIMEOUT },
+    });
     return { runner: glideRunner(client), close: async () => client.close() };
   },
 });
@@ -79,6 +83,7 @@ export const glideCluster = (readFrom: ReadFrom = 'primary'): Target => ({
     const client = await GlideClusterClient.createClient({
       addresses: env.cluster!,
       requestTimeout: TIMEOUT,
+      advancedConfiguration: { connectionTimeout: TIMEOUT },
       readFrom,
     });
     return { runner: glideRunner(client), close: async () => client.close() };
