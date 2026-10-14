@@ -59,6 +59,24 @@ jobs:
       - if: always()
         run: docker compose -f docker/compose.yml --profile redis down --volumes
 
+  glide-floor:
+    name: servers (glide 2.0.1, the lowest the peer range allows)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm add -D @valkey/valkey-glide@2.0.1
+      - run: docker compose -f docker/compose.yml up -d --wait
+      - run: pnpm typecheck
+      - run: pnpm test:servers
+      - if: always()
+        run: docker compose -f docker/compose.yml down --volumes
+
   consumers:
     runs-on: ubuntu-latest
     steps:
