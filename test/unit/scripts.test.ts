@@ -16,8 +16,13 @@ describe('scripts', () => {
     }
   });
 
-  it('carry no #!lua shebang, which under OOM would refuse renew() and release() whole', () => {
-    for (const script of scripts) expect(script.source.startsWith('#!')).toBe(false);
+  it('carry no #!lua shebang, which under OOM would refuse renew() and release() whole, but on complete()', () => {
+    for (const script of scripts) {
+      if (script === idempotency.COMPLETE) continue;
+      expect(script.source.startsWith('#!'), script.name).toBe(false);
+    }
+    // Stores the response of a handler that has run, out of memory too: one key, no new record.
+    expect(idempotency.COMPLETE.source.split('\n')[0]).toBe('#!lua flags=allow-oom');
   });
 
   it('write numbers through string.format, never through tostring()', () => {

@@ -4,8 +4,8 @@ import { defineScript } from '../internal/script.js';
 // Redis instead" in the idempotency guide): a hash at `idem:<key>` with `state`, `fp`, `owner` and
 // `resp`. A record either one writes, the other reads, so an application moves from the recipe to
 // this store, or back, without migrating anything, during a rolling deploy too. Every script
-// touches one key, so the store works in a cluster with no hash tag. No `#!lua` shebang: see the
-// lock scripts.
+// touches one key, so the store works in a cluster with no hash tag. No `#!lua` shebang but on
+// COMPLETE: see the lock scripts.
 
 /** KEYS: record. ARGV: fingerprint, owner, lockTtl ms. Returns {1} when taken, else {0, state, fp, resp}. */
 export const ACQUIRE = defineScript(
@@ -20,10 +20,19 @@ return {0, r[1], r[2], r[3]}
 `,
 );
 
-/** KEYS: record. ARGV: owner, response JSON, ttl ms. Returns 1, or 0 when `owner` holds no live lock. */
+/**
+ * KEYS: record. ARGV: owner, response JSON, ttl ms. Returns 1, or 0 when `owner` holds no live lock.
+ *
+ * `allow-oom`, the one flagged script: under `noeviction` and out of memory, a plain script's HSET
+ * is refused, the record stays in flight until its lock expires, and `@nestjs/idempotency` runs the
+ * handler again on the retry, the side effect included. With the flag, the response is stored past
+ * `maxmemory`. That overshoot is bounded: `acquire()` stays refused, so only records already in
+ * flight can complete, one key and one response each.
+ */
 export const COMPLETE = defineScript(
   'idempotency.complete',
-  `if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[1] then
+  `#!lua flags=allow-oom
+if redis.call('HGET', KEYS[1], 'owner') ~= ARGV[1] then
   return 0
 end
 redis.call('HSET', KEYS[1], 'state', 'completed', 'resp', ARGV[2])

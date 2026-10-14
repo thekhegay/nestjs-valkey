@@ -16,6 +16,7 @@ import {
 } from 'vitest';
 import { glideRunner } from '../../src/glide/index.js';
 import { ValkeyIdempotencyStore } from '../../src/idempotency/index.js';
+import { COMPLETE } from '../../src/idempotency/scripts.js';
 import { ValkeyStoreError, type ScriptRunner } from '../../src/index.js';
 import { hashTag } from '../../src/internal/keys.js';
 import { ACQUIRE, RENEW } from '../../src/locks/scripts.js';
@@ -243,7 +244,8 @@ describe(
       }
     });
 
-    it('under OOM refuses only what grows memory, with no partial write, where a #!lua script refuses renew()', async () => {
+    it('under OOM refuses new locks and records with no partial write, and still renews, releases and completes', async () => {
+      const response = { status: 200, headers: {}, body: 'x'.repeat(1_000) };
       for (const [name, runner] of await runnersFor()) {
         const run = randomUUID();
         const locks = new ValkeyLockStore(runner, { prefix: `oom:${run}:`, startupCheck: false });
@@ -251,6 +253,7 @@ describe(
         expect((await locks.acquire('held', 'a', 60_000)).acquired).toBe(true);
         expect((await locks.acquire('control', 'a', 60_000)).acquired).toBe(true);
         expect(await idem.acquire('record', 'a', 'fp', 60_000)).toEqual({ state: 'acquired' });
+        expect(await idem.acquire('plain', 'a', 'fp', 60_000)).toEqual({ state: 'acquired' });
 
         const used = Number(/used_memory:(\d+)/.exec(await server.info('memory'))![1]);
         await server.config('SET', 'maxmemory', String(Math.floor(used / 2)));
@@ -260,13 +263,31 @@ describe(
           expect(await locks.renew('held', 'a', 60_000), name).toBe(true);
           expect(await locks.release('held', 'a'), name).toBe(true);
 
+          await expect(idem.acquire('new', 'a', 'fp', 60_000), name).rejects.toThrow(/OOM/);
+          expect(await server.exists(`oom:${run}:new`)).toBe(0);
           expect(await idem.extend('record', 'a', 60_000), name).toBe(true);
+          // The handler has run: complete() stores its response (allow-oom) rather than leave the
+          // record to expire and a retry to run the handler again.
+          expect(await idem.complete('record', 'a', response, 60_000), name).toBe(true);
+          expect(await server.hgetall(`oom:${run}:record`)).toEqual({
+            state: 'completed',
+            fp: 'fp',
+            resp: JSON.stringify(response),
+          });
+          expect(await idem.acquire('record', 'b', 'fp', 60_000), name).toEqual({
+            state: 'completed',
+            fingerprint: 'fp',
+            response,
+          });
+          // The same script without its flag is refused, and leaves the record in flight.
+          const plain = COMPLETE.source.replace(/^#!lua[^\n]*\n/, '');
           await expect(
-            idem.complete('record', 'a', { status: 200, headers: {}, body: 'x' }, 60_000),
+            server.eval(plain, 1, `oom:${run}:plain`, 'a', JSON.stringify(response), '60000'),
           ).rejects.toThrow(/OOM/);
-          expect(await server.hget(`oom:${run}:record`, 'state')).toBe('in-flight');
-          expect(await idem.release('record', 'a'), name).toBe(true);
+          expect(await server.hget(`oom:${run}:plain`, 'state')).toBe('in-flight');
+          expect(await idem.release('plain', 'a'), name).toBe(true);
 
+          // A #!lua script without allow-oom is refused whole, renew() included.
           await expect(
             server.eval(`#!lua\n${RENEW.source}`, 1, `oom:${run}:{control}`, 'a', '60000'),
           ).rejects.toThrow(/OOM/);

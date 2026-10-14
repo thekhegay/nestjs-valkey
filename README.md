@@ -146,14 +146,27 @@ the store cannot read, such as an idempotency record it did not write, throws `V
 `nestjs-valkey`; the message never names a key, an owner or a stored response. `acquire()` that gets such a reply
 releases the lock first (if it holds it), best-effort. A fence key that holds anything but a token the store wrote,
 or one at 2^53 - 2 or above, fails `acquire()` with the script's own error (`locks.acquire: the fence holds no
-token this store can extend`) before anything is written. The scripts carry no `#!lua`
-flags, so under memory pressure only the writes that grow memory (`acquire()`, `complete()`) are refused, never
-`renew()`, `release()` or `extend()`.
+token this store can extend`) before anything is written. Out of memory, only `acquire()` fails: see below.
+
+## Out of memory
+
+Under `noeviction`, a server at `maxmemory` refuses the writes that grow memory. The stores refuse what would start
+something new and finish what has started:
+
+- `acquire()`, in both stores, fails with `OOM` before anything is written.
+- `renew()`, `release()` and `extend()` run: they grow nothing, and their scripts carry no `#!lua` flags, which
+  would have the server refuse them whole.
+- `complete()` stores the response past `maxmemory`: its script, alone, carries `#!lua flags=allow-oom`. The
+  handler has already run; refused, the record would stay in flight until its lock expired, and
+  `@nestjs/idempotency` would run the handler again on the retry, side effect included. Since `acquire()` stays
+  refused, only requests already in flight complete that way, one record each: leave headroom above `maxmemory`
+  (and below the memory limit of the server's container) for as many responses as you serve at once.
 
 ## Moving from the documentation's recipes
 
-- **Idempotency:** the same hash at `idem:<key>`, with the same fields and scripts, so instances on the recipe
-  and on this store read each other's records; switch at any time, during a rolling deploy too.
+- **Idempotency:** the same hash at `idem:<key>`, with the same fields and scripts (`complete()`'s has one line
+  more, its `allow-oom` flag), so instances on the recipe and on this store read each other's records; switch at
+  any time, during a rolling deploy too.
 - **Locks:** the keys differ (`locks:key:<key>` and `locks:fencing-token` there), so old and new instances do not
   exclude each other. Stop every instance, then start them on this store. Its tokens are far above any value the
   recipe's counter reached, so resources fenced with old tokens accept the new ones.

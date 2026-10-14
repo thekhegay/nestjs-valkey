@@ -1,9 +1,10 @@
 import { defineScript } from '../internal/script.js';
 
 // No `#!lua` shebang, on purpose. Under `noeviction` and out of memory, a script with a shebang is
-// refused whole, so renew() and release() would fail although they add nothing to memory: live
-// holders would lose their locks, and the release that frees memory would be refused. A plain
-// script refuses only the commands that grow memory (SET), and only before its first write.
+// refused whole (unless it says `allow-oom`), so renew() and release() would fail although they
+// add nothing to memory: live holders would lose their locks, and the release that frees memory
+// would be refused. A plain script refuses only the commands that grow memory (SET), and only
+// before its first write. Only the idempotency store's COMPLETE carries a flag.
 
 /**
  * KEYS: lock, fence (one slot). ARGV: owner, ttl ms, fence retention ms. Returns the fencing token,
