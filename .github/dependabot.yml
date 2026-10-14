@@ -1,0 +1,59 @@
+version: 2
+
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'daily'
+      time: '08:00'
+      timezone: 'Asia/Almaty'
+    cooldown:
+      default-days: 1
+    open-pull-requests-limit: 10
+    assignees:
+      - 'thekhegay'
+    labels:
+      - 'dependencies'
+      - 'type: chore'
+    groups:
+      nestjs:
+        patterns:
+          - '@nestjs/*'
+      clients:
+        patterns:
+          - '@valkey/*'
+          - 'ioredis'
+          - 'iovalkey'
+      lint:
+        patterns:
+          - 'oxlint'
+          - 'prettier'
+          - 'publint'
+          - '@arethetypeswrong/*'
+      test:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+      types:
+        patterns:
+          - '@types/*'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'daily'
+      time: '08:00'
+      timezone: 'Asia/Almaty'
+    groups:
+      actions:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+    assignees:
+      - 'thekhegay'
+    labels:
+      - 'dependencies'
+      - 'github-actions'
+      - 'type: chore'
