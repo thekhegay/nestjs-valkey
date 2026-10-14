@@ -199,6 +199,7 @@ describe(
         addresses: [env.standalone!],
         defaultDecoder: Decoder.Bytes,
         requestTimeout: 5_000,
+        advancedConfiguration: { connectionTimeout: 5_000 },
       });
       try {
         const locks = new ValkeyLockStore(glideRunner(client), { startupCheck: false });

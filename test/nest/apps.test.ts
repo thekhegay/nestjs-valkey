@@ -32,7 +32,12 @@ const REDIS = Symbol('REDIS');
   providers: [
     {
       provide: GLIDE,
-      useFactory: () => GlideClient.createClient({ addresses: [env.standalone!], requestTimeout: 5_000 }),
+      useFactory: () =>
+        GlideClient.createClient({
+          addresses: [env.standalone!],
+          requestTimeout: 5_000,
+          advancedConfiguration: { connectionTimeout: 5_000 },
+        }),
     },
     { provide: REDIS, useFactory: () => new Redis({ ...env.standalone!, commandTimeout: 5_000 }) },
   ],

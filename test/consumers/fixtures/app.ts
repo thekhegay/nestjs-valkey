@@ -26,7 +26,12 @@ const locksOnGlide = process.env.LOCKS_CLIENT !== 'ioredis';
   providers: [
     {
       provide: GLIDE,
-      useFactory: () => GlideClient.createClient({ addresses: [address], requestTimeout: 5000 }),
+      useFactory: () =>
+        GlideClient.createClient({
+          addresses: [address],
+          requestTimeout: 5000,
+          advancedConfiguration: { connectionTimeout: 5000 },
+        }),
     },
     { provide: REDIS, useFactory: () => new Redis({ ...address, commandTimeout: 2000 }) },
   ],
