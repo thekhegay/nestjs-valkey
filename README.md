@@ -15,7 +15,9 @@ npm i @valkey/valkey-glide    # or ioredis / iovalkey, which you already have
 
 Take only the official package you use: both are optional peers, and so is glide. The package is ESM-only, like
 the official ones, and needs the same Node (20.19 or later). A CommonJS application loads it through
-`require()` of ES modules, as it loads `@nestjs/locks`. Servers: Valkey 7.2+ or Redis 7.0+.
+`require()` of ES modules, as it loads `@nestjs/locks`; Node 22.12 prints one `ExperimentalWarning` for that at
+startup, whichever ES module comes first, and 20.19 and 22.13+ only under `--trace-require-module`. Servers:
+Valkey 7.2+ or Redis 7.0+.
 
 ## Register the stores
 

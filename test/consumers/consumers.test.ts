@@ -36,6 +36,42 @@ async function run(command: string, args: string[], options: { cwd: string; env?
   }
 }
 
+/**
+ * Node 22.12 (and 23.0 to 23.4) prints one ExperimentalWarning the first time a CommonJS module
+ * outside node_modules loads an ES module through require(), for @nestjs/locks as for this
+ * package; 20.19 and 22.13 print it only under --trace-require-module.
+ */
+const REQUIRE_ESM_WARNING = new RegExp(
+  [
+    String.raw`\(node:\d+\) ExperimentalWarning: CommonJS module .+ is loading ES Module .+ using require\(\)\.\n`,
+    String.raw`Support for loading ES Module in require\(\) is an experimental feature and might change at any time\n`,
+    String.raw`\(Use .node --trace-warnings \.\.\.. to show where the warning was created\)\n`,
+  ].join(''),
+  'g',
+);
+
+const versions = new Map<string, Promise<string>>();
+function versionOf(node: string): Promise<string> {
+  let version = versions.get(node);
+  if (!version) {
+    version = exec(node, ['-p', 'process.versions.node']).then(({ stdout }) => stdout.trim());
+    versions.set(node, version);
+  }
+  return version;
+}
+
+/**
+ * `stderr` without the require(esm) warning, which a CommonJS application must print exactly once
+ * on a Node that prints it by default, and nothing else must ever print.
+ */
+async function withoutRequireEsmWarning(node: string, stderr: string, commonjs: boolean): Promise<string> {
+  const [major, minor] = (await versionOf(node)).split('.').map(Number) as [number, number];
+  const byDefault = (major === 22 && minor === 12) || (major === 23 && minor < 5);
+  const printed = stderr.match(REQUIRE_ESM_WARNING)?.length ?? 0;
+  expect(printed, `require(esm) warnings on Node ${major}.${minor}`).toBe(commonjs && byDefault ? 1 : 0);
+  return stderr.replace(REQUIRE_ESM_WARNING, '');
+}
+
 const skip = missing('VALKEY_URL');
 
 describe(
@@ -70,14 +106,14 @@ describe(
       return dir;
     }
 
-    async function start(dir: string, node: string, locksClient: 'glide' | 'ioredis') {
+    async function start(dir: string, node: string, locksClient: 'glide' | 'ioredis', commonjs: boolean) {
       const { stdout, stderr } = await run(node, ['dist/main.js'], {
         cwd: dir,
         env: { ...process.env, NODE_ENV: 'production', LOCKS_CLIENT: locksClient },
       });
       const line = stdout.split('\n').find((l) => l.startsWith('RESULT '));
       expect(line, `no result in:\n${stdout}\n${stderr}`).toBeDefined();
-      expect(stderr).not.toMatch(/ERR_|Error:|Warning/);
+      expect(await withoutRequireEsmWarning(node, stderr, commonjs)).not.toMatch(/ERR_|Error:|Warning/);
       return { result: JSON.parse(line!.slice('RESULT '.length)), stdout };
     }
 
@@ -139,7 +175,7 @@ describe(
       for (const node of nodes) {
         it(`requires every entry point through require(esm) on Node ${node.label}`, async () => {
           const { stdout, stderr } = await run(node.path, ['require-all.cjs'], { cwd: dir });
-          expect(stderr).toBe('');
+          expect(await withoutRequireEsmWarning(node.path, stderr, true)).toBe('');
           const loaded = JSON.parse(stdout.slice(stdout.indexOf('REQUIRED ') + 'REQUIRED '.length));
           expect(loaded).toMatchObject({
             'nestjs-valkey': ['ValkeyStoreError'],
@@ -152,7 +188,7 @@ describe(
 
         for (const locksClient of ['glide', 'ioredis'] as const) {
           it(`starts in production and serves locks and an idempotent route on Node ${node.label} (locks on ${locksClient})`, async () => {
-            const { result, stdout } = await start(dir, node.path, locksClient);
+            const { result, stdout } = await start(dir, node.path, locksClient, true);
             expectWorking(result, stdout, '11', node.label);
           });
         }
@@ -169,7 +205,7 @@ describe(
       for (const node of nodes) {
         for (const locksClient of ['glide', 'ioredis'] as const) {
           it(`starts in production and serves locks and an idempotent route on Node ${node.label} (locks on ${locksClient})`, async () => {
-            const { result, stdout } = await start(dir, node.path, locksClient);
+            const { result, stdout } = await start(dir, node.path, locksClient, false);
             expectWorking(result, stdout, '12', node.label);
           });
         }
