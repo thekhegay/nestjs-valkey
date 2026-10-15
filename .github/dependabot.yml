@@ -10,6 +10,10 @@ updates:
     cooldown:
       default-days: 1
     open-pull-requests-limit: 10
+    # @types/node moves with the Node floor in engines, not on its own
+    ignore:
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
     assignees:
       - 'thekhegay'
     labels:
