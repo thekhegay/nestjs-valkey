@@ -108,8 +108,9 @@ A lock lives at `<prefix>{<tag>}`, and the key's last fencing token at `<prefix>
 key with `%`, `{` and `}` escaped, so both keys always hash to one slot, whatever braces the key holds, and locks
 spread over the shards. (The documentation's Redis lock store increments one global counter next to the lock,
 which a cluster refuses with `CROSSSLOT`.) An idempotency record is one key, the documentation's layout. A
-prefix must not contain a brace, and neither must ioredis's `keyPrefix`, which applies on top of it. Every
-script runs on the primary, whatever the client reads from.
+prefix must not contain a brace, and neither must ioredis's `keyPrefix`, which applies on top of it:
+`ioredisRunner()` refuses a client whose `keyPrefix` has one. Every script runs on the primary, whatever the
+client reads from.
 
 ## Fencing tokens
 
