@@ -36,7 +36,9 @@ for (const target of coreTargets()) {
         expect(await locks.release(key, 'a')).toBe(true);
         expect(await idem.acquire(key, 'a', 'fp', 10_000)).toEqual({ state: 'acquired' });
         expect(await idem.extend(key, 'a', 10_000)).toBe(true);
-        expect(await idem.complete(key, 'a', { status: 200, headers: {}, body: round }, 10_000)).toBe(true);
+        // Every other round a response large enough for glideRunner() to send it as a command.
+        const body = round % 2 === 0 ? round : 'x'.repeat(70 * 1024);
+        expect(await idem.complete(key, 'a', { status: 200, headers: {}, body }, 10_000)).toBe(true);
         expect(await idem.release(key, 'a')).toBe(false);
         await locks.checkServer();
         await idem.checkServer();
