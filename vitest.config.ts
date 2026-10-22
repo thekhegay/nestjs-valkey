@@ -25,11 +25,12 @@ export default defineConfig({
         },
       },
       {
-        // Suites that disturb the shared servers (SCRIPT FLUSH on every node) run alone, after the
-        // others: a flush between glide's SCRIPT LOAD and its EVALSHA would fail an unrelated call.
+        // Suites that disturb the shared servers run alone, after the others: SCRIPT FLUSH on every
+        // node (a flush between glide's SCRIPT LOAD and its EVALSHA would fail an unrelated call), and
+        // a cluster slot left open mid-migration (acquire() in it fails).
         test: {
           name: 'servers-exclusive',
-          include: ['test/noscript/**/*.test.ts'],
+          include: ['test/{noscript,migration}/**/*.test.ts'],
           setupFiles: ['test/support/setup.ts'],
           testTimeout: 60_000,
           hookTimeout: 60_000,
