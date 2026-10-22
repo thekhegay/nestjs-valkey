@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Cluster, Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ValkeyIdempotencyStore } from '../../src/idempotency/index.js';
-import { admin, coreTargets, type Connection } from '../support/servers.js';
+import { admin, coreTargets, glideCluster, glideStandalone, type Connection } from '../support/servers.js';
 import { sleep } from '../support/sleep.js';
 
 const response = {
@@ -92,6 +92,42 @@ for (const target of coreTargets()) {
       expect(results.filter((r) => r.state === 'acquired')).toHaveLength(1);
       for (const [i, r] of results.entries()) {
         if (i !== winner) expect(r).toEqual({ state: 'in-flight', fingerprint: `fp-${winner}` });
+      }
+    });
+  });
+}
+
+// glide 2.x passes invokeScript's arguments to its core slowly, and every other call on the client
+// waits behind them: the runner sends large ones as a command instead.
+for (const target of [glideStandalone(), glideCluster()]) {
+  const title = target.skip ? `${target.name} (skipped: ${target.skip})` : target.name;
+  describe(`a 32 MiB response through ${title}`, { skip: target.skip !== false }, () => {
+    it('is stored without holding up the next call on the same client', async () => {
+      const connection = await target.connect();
+      const server = admin(target);
+      const [key, other] = [randomUUID(), randomUUID()];
+      try {
+        const idem = new ValkeyIdempotencyStore(connection.runner, { startupCheck: false });
+        expect(await idem.acquire(key, 'a', 'fp', 60_000)).toEqual({ state: 'acquired' });
+        expect(await idem.acquire(other, 'a', 'fp', 60_000)).toEqual({ state: 'acquired' });
+        const large = { status: 200, headers: {}, body: 'x'.repeat(32 * 1024 * 1024) };
+        const started = performance.now();
+        const completed = idem.complete(key, 'a', large, 60_000);
+        const extended = idem
+          .extend(other, 'a', 60_000)
+          .then((done) => ({ done, at: performance.now() - started }));
+        expect(await completed).toBe(true);
+        const { done, at } = await extended;
+        expect(done).toBe(true);
+        // Behind invokeScript it waited 6.6 s on a laptop, and grows faster than the response.
+        expect(at).toBeLessThan(3_000);
+        expect(await server.hstrlen(`idem:${key}`, 'resp')).toBe(JSON.stringify(large).length);
+        expect(await server.hget(`idem:${key}`, 'state')).toBe('completed');
+      } finally {
+        await server.del(`idem:${key}`);
+        await server.del(`idem:${other}`);
+        await server.quit();
+        await connection.close();
       }
     });
   });

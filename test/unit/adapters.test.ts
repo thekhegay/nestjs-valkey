@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { BaseClient, Decoder, GlideClient, GlideClusterClient } from '@valkey/valkey-glide';
+import { BaseClient, Decoder, GlideClient, GlideClusterClient, Script } from '@valkey/valkey-glide';
 import { Cluster, Redis } from 'ioredis';
 import { Cluster as Ioredis5Cluster, Redis as Ioredis5 } from 'ioredis5';
 import { Cluster as IovalkeyCluster, Valkey } from 'iovalkey';
@@ -64,6 +64,59 @@ describe('glideRunner()', () => {
       keys: [],
       args: [],
       decoder: Decoder.String,
+    });
+  });
+
+  describe('a call with 64 KiB of arguments or more', () => {
+    const large = ['o', 'x'.repeat(64 * 1024 - 2), '1'];
+    const clients = (customCommand: (...args: unknown[]) => Promise<unknown>) => {
+      return [GlideClient, GlideClusterClient].map((Client) => {
+        const invokeScript = vi.fn(async () => 'from invokeScript');
+        return {
+          client: Object.assign(Object.create(Client.prototype), { invokeScript, customCommand }),
+          invokeScript,
+        };
+      });
+    };
+
+    it('goes as EVALSHA through customCommand, decoded as strings, and smaller ones do not', async () => {
+      const customCommand = vi.fn(async () => 'from customCommand');
+      for (const { client, invokeScript } of clients(customCommand)) {
+        customCommand.mockClear();
+        const runner = glideRunner(client);
+        await expect(runner.run(script, ['k'], large)).resolves.toBe('from customCommand');
+        expect(customCommand).toHaveBeenCalledWith(['EVALSHA', script.sha1, '1', 'k', ...large], {
+          decoder: Decoder.String,
+        });
+        expect(invokeScript).not.toHaveBeenCalled();
+        await expect(runner.run(script, ['k'], large.slice(0, 2))).resolves.toBe('from invokeScript');
+        expect(customCommand).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('goes through invokeScript, which loads the script, on NOSCRIPT only', async () => {
+      const noScript = new Error(
+        'An error was signalled by the server: - NoScriptError: No matching script.',
+      );
+      const customCommand = vi.fn(async () => Promise.reject(noScript));
+      for (const { client, invokeScript } of clients(customCommand)) {
+        await expect(glideRunner(client).run(script, ['k'], large)).resolves.toBe('from invokeScript');
+        expect(invokeScript).toHaveBeenCalledWith(expect.anything(), {
+          keys: ['k'],
+          args: large,
+          decoder: Decoder.String,
+        });
+        expect((invokeScript.mock.calls[0] as unknown[])[0]).toBeInstanceOf(Script);
+      }
+
+      const timeout = new Error('Request timed out');
+      for (const failure of [timeout, 'NoScriptError']) {
+        const failing = vi.fn(async () => Promise.reject(failure));
+        for (const { client, invokeScript } of clients(failing)) {
+          await expect(glideRunner(client).run(script, ['k'], large)).rejects.toBe(failure);
+          expect(invokeScript).not.toHaveBeenCalled();
+        }
+      }
     });
   });
 });
