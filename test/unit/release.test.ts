@@ -1,6 +1,15 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,8 +58,26 @@ function sandbox(version: string) {
     const { status, stdout, stderr } = spawnSync(process.execPath, ['scripts/release.mjs', ...args], {
       cwd: dir,
       encoding: 'utf8',
+      env: { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}` },
     });
     return { status, output: `${stdout}${stderr}` };
+  };
+  /** A `gh` that answers `api` calls: generate-notes with `notes`, anything else with nothing. */
+  const fakeGh = (notes: string) => {
+    mkdirSync(join(dir, 'bin'), { recursive: true });
+    writeFileSync(join(dir, 'notes.md'), notes);
+    writeFileSync(
+      join(dir, 'bin/gh'),
+      [
+        `#!${process.execPath}`,
+        `const notes = ${JSON.stringify(join(dir, 'notes.md'))};`,
+        "if (process.argv.some((arg) => arg.endsWith('/releases/generate-notes'))) {",
+        "  process.stdout.write(require('node:fs').readFileSync(notes, 'utf8'));",
+        '}',
+        '',
+      ].join('\n'),
+    );
+    chmodSync(join(dir, 'bin/gh'), 0o755);
   };
   /** Cuts the release: prepare, then commit what it wrote, as the release pull request does. */
   const cut = (bump: string, landedAfterTheCut?: () => void) => {
@@ -70,7 +97,7 @@ function sandbox(version: string) {
   git('init', '-q', '-b', 'main');
   commit('chore: start');
   if (version !== '0.0.0') git('tag', `v${version}`);
-  return { git, commit, release, cut };
+  return { git, commit, release, cut, fakeGh };
 }
 
 describe('release.mjs check', () => {
@@ -144,5 +171,33 @@ describe('release.mjs check', () => {
     const { status, output } = repo.release('check');
     expect(status).toBe(1);
     expect(output).toMatch(/misses 1 commit\(s\)[\s\S]+revert: feat: shipped in 0\.2\.0/);
+  });
+});
+
+describe('release.mjs body', () => {
+  it('names the people who contributed for the first time, and no bot', () => {
+    const repo = sandbox('0.0.0');
+    repo.commit('fix: a fix');
+    repo.cut('minor');
+    repo.fakeGh(
+      [
+        "## What's Changed",
+        '* build(deps-dev): bump typescript by @dependabot[bot] in https://github.com/example/sandbox/pull/2',
+        '',
+        '## New Contributors',
+        '* @dependabot[bot] made their first contribution in https://github.com/example/sandbox/pull/2',
+        '* @someone made their first contribution in https://github.com/example/sandbox/pull/3',
+        '* @renovate[bot] made their first contribution in https://github.com/example/sandbox/pull/4',
+        '* @github-actions[bot] made their first contribution in https://github.com/example/sandbox/pull/5',
+        '',
+        '**Full Changelog**: https://github.com/example/sandbox/commits/v0.1.0',
+      ].join('\n'),
+    );
+    const { status, output } = repo.release('body');
+    expect(status).toBe(0);
+    expect(output).toContain('### 👋 New Contributors');
+    expect(output).toContain('* @someone made their first contribution');
+    expect(output).not.toMatch(/\[bot\]/);
+    expect(output).toContain('**Full Changelog**: https://github.com/example/sandbox/commits/v0.1.0');
   });
 });
