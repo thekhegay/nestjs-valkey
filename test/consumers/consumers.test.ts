@@ -102,7 +102,10 @@ describe(
       const manifest = JSON.parse(await readFile(join(dir, 'package.json'), 'utf8'));
       manifest.dependencies['nestjs-valkey'] = `file:${tarball}`;
       await writeFile(join(dir, 'package.json'), JSON.stringify(manifest, null, 2));
-      await run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: dir });
+      // No lockfile, so whatever the ranges resolve to today; none of it needs an install script.
+      await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--loglevel=error'], {
+        cwd: dir,
+      });
       return dir;
     }
 
