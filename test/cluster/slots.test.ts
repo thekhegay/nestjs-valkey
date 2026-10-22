@@ -101,9 +101,13 @@ describe(`in a cluster${skip ? ` (skipped: ${skip})` : ''}`, { skip: skip !== fa
   });
 
   it("refuses the documentation's lock recipe with CROSSSLOT, so this suite really runs on a cluster", async () => {
+    // A lock key in the counter's own slot, one draw in 16384, would be served: none is drawn there.
+    const counter = keySlot('locks:fencing-token');
     for (let i = 0; i < 20; i++) {
+      let key = `locks:key:${randomUUID()}`;
+      while (keySlot(key) === counter) key = `locks:key:${randomUUID()}`;
       await expect(
-        server.eval(DOCS_LOCK_ACQUIRE, 2, `locks:key:${randomUUID()}`, 'locks:fencing-token', 'owner', 1000),
+        server.eval(DOCS_LOCK_ACQUIRE, 2, key, 'locks:fencing-token', 'owner', 1000),
       ).rejects.toThrow(/CROSSSLOT/);
     }
   });
