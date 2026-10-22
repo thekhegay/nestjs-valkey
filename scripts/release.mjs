@@ -24,7 +24,10 @@
  * written when the release pull request is cut, so a feat or fix merged into
  * main after that would ship in the tag with no line anywhere: the next
  * section starts from the new tag. It refuses until the section names every
- * such commit, and the cure is to run Release PR again with the same bump.
+ * such commit and every breaking one, of any type; a commit reverted within
+ * the range is left out with its revert, as conventional-changelog leaves
+ * them out. The cure is to cut the release again, which on main takes
+ * reverting the release commit first.
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -65,7 +68,7 @@ async function prepare(flags) {
   // to the commits. Below 1.0 a breaking change rides a minor, from 1.0 a major.
   const current = PKG.version;
   const floor = current.startsWith('0.') ? ['minor', 'major'] : ['major'];
-  const breaking = breakingSince(lastTag());
+  const breaking = breakingSince(lastTag()).map(({ subject }) => subject);
   if (breaking.length > 0 && !floor.includes(bump)) {
     fail(
       [
@@ -195,23 +198,60 @@ function check() {
 
   // A first release has no tag before it: everything up to HEAD ships.
   const since = previousTag();
-  const missing = execFileSync('git', ['log', '--format=%H %s', since ? `${since}..HEAD` : 'HEAD'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-  })
-    .split('\n')
-    .filter((line) => /^[0-9a-f]{40} (feat|fix|perf|revert)(\([^)]*\))?!?:/.test(line))
-    .filter((line) => !section.includes(line.slice(0, 40)));
+  // A breaking commit of any type is listed (under its type and BREAKING
+  // CHANGES), and one merged after the cut may need a bigger bump, which
+  // cutting again checks.
+  const missing = unreverted(commitsSince(since))
+    .filter((commit) => /^(feat|fix|perf|revert)(\([^)]*\))?!?:/.test(commit.subject) || isBreaking(commit))
+    .filter((commit) => !section.includes(commit.sha));
   if (missing.length > 0) {
     fail(
       [
         `CHANGELOG.md misses ${missing.length} commit(s) that would ship in v${PKG.version}:`,
-        ...missing.map((line) => `  ${line.slice(0, 7)} ${line.slice(41)}`),
-        'main moved after the release pull request was cut. Run Release PR again with the same bump.',
+        ...missing.map(({ sha, subject }) => `  ${sha.slice(0, 7)} ${subject}`),
+        'main moved after the release pull request was cut. Before it merges, run Release PR again with',
+        'the same bump, or the one a breaking commit now needs: it rewrites the release branch. Once it',
+        `has merged, first revert the release commit (revert: chore(release): v${PKG.version}) through a`,
+        'pull request, then run Release PR again.',
       ].join('\n'),
     );
   }
   console.log(`CHANGELOG.md covers everything since ${since ?? 'the first commit'}`);
+}
+
+/** The commits in `<tag>..HEAD`, or up to HEAD without a tag: sha, subject and body. */
+function commitsSince(tag) {
+  return execFileSync('git', ['log', '-z', '--format=%H%n%s%n%b', tag ? `${tag}..HEAD` : 'HEAD'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  })
+    .split('\0')
+    .filter((entry) => entry.trim())
+    .map((entry) => {
+      const [sha, subject, ...rest] = entry.replace(/^\n+/, '').split('\n');
+      return { sha, subject, body: rest.join('\n') };
+    });
+}
+
+/**
+ * Without the commits reverted in the same range, and their reverts:
+ * conventional-changelog drops both when a revert names its commit (`This
+ * reverts commit <sha>.`, the body git and GitHub's Revert button write).
+ */
+function unreverted(commits) {
+  const shas = new Set(commits.map(({ sha }) => sha));
+  const dropped = new Set();
+  for (const commit of commits) {
+    for (const [, sha] of commit.body.matchAll(/This reverts commit ([0-9a-f]{40})/g)) {
+      if (shas.has(sha)) dropped.add(sha).add(commit.sha);
+    }
+  }
+  return commits.filter(({ sha }) => !dropped.has(sha));
+}
+
+/** `type!:`, or a `BREAKING CHANGE:` footer, as conventional commits mark one. */
+function isBreaking(commit) {
+  return /^[a-z]+(\([^)]*\))?!:/.test(commit.subject) || /^BREAKING[ -]CHANGE:/m.test(commit.body);
 }
 
 // The newest release tag other than the one being cut. `lastTag()` is the
@@ -234,14 +274,7 @@ function lastTag() {
 
 function breakingSince(tag) {
   if (!tag) return [];
-  return execFileSync('git', ['log', '-z', '--format=%s%n%b', `${tag}..HEAD`], {
-    cwd: ROOT,
-    encoding: 'utf8',
-  })
-    .split('\0')
-    .map((commit) => commit.trim())
-    .filter((commit) => /^[a-z]+(\([^)]*\))?!:/.test(commit) || /^BREAKING[ -]CHANGE:/m.test(commit))
-    .map((commit) => commit.split('\n')[0]);
+  return unreverted(commitsSince(tag)).filter(isBreaking);
 }
 
 function fail(message) {
