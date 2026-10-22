@@ -17,8 +17,9 @@ how to work in the repository and why it is shaped the way it is.
 - `test/unit` needs nothing, and `test/types` is only typechecked
   (`pnpm typecheck`). `test/contract`, `test/server`, `test/cluster`,
   `test/behaviour`, `test/compat`, `test/nest` and `test/consumers` need the
-  Docker stack (`pnpm servers:up`), and so does `test/noscript`, which flushes
-  the script cache on every node and runs alone, after the others. `test/chaos`
+  Docker stack (`pnpm servers:up`), and so do `test/noscript`, which flushes
+  the script cache on every node, and `test/migration`, which leaves a cluster
+  slot open mid-migration: those two run alone, after the others. `test/chaos`
   runs cluster failovers under load and is opt-in (`pnpm test:chaos`, nightly
   in CI).
 
