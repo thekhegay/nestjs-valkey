@@ -15,9 +15,23 @@ npm i @valkey/valkey-glide    # or ioredis / iovalkey, which you already have
 
 Take only the official package you use: both are optional peers, and so is glide. The package is ESM-only, like
 the official ones, and needs the same Node (20.19 or later). A CommonJS application loads it through
-`require()` of ES modules, as it loads `@nestjs/locks`; Node 22.12 prints one `ExperimentalWarning` for that at
-startup, whichever ES module comes first, and 20.19 and 22.13+ only under `--trace-require-module`. Servers:
-Valkey 7.2+ or Redis 7.0+.
+`require()` of ES modules, as it loads `@nestjs/locks`, which on the 22 line takes 22.12 or later: 22.0 to 22.11
+refuse it with `ERR_REQUIRE_ESM` unless started with `--experimental-require-module`. Node 22.12 prints one
+`ExperimentalWarning` for that at startup, whichever ES module comes first, and 20.19 and 22.13+ only under
+`--trace-require-module`. Servers: Valkey 7.2+ or Redis 7.0+.
+
+Tools that load CommonJS need the same. Jest as Nest's starter sets it up (ts-jest) refuses an ES module under
+`node_modules` until it may transform it, which takes `allowJs: true` in the tsconfig ts-jest reads and, in the
+Jest config:
+
+```json
+{
+  "transformIgnorePatterns": ["/node_modules/(?!(@nestjs/locks|@nestjs/idempotency|nestjs-valkey)/)"]
+}
+```
+
+TypeScript resolves the imports with `module` set to `nodenext` (TypeScript 5.8 or later) or `commonjs`; `node16`
+refuses them with TS1479.
 
 ## Register the stores
 
@@ -61,7 +75,7 @@ import { Redis } from 'ioredis';
 import { ioredisRunner } from 'nestjs-valkey/ioredis';
 
 valkeyLockStore({
-  inject: [STORE_REDIS], // useFactory: () => new Redis(process.env.REDIS_URL, { commandTimeout: 2000 })
+  inject: [STORE_REDIS], // useFactory: () => new Redis(process.env.REDIS_URL!, { commandTimeout: 2000 })
   useFactory: (redis: Redis) => ({ runner: ioredisRunner(redis), prefix: 'billing:locks:' }),
 });
 ```
@@ -73,8 +87,16 @@ as does every later one. `ioredisRunner()` warns when the client has no `command
 from one that runs `XREADGROUP BLOCK` or `BLPOP`: a `commandTimeout` applies to blocking commands too
 (`redis.duplicate({ commandTimeout: 2000 })` makes one). `ioredisRunner()` refuses a client with `stringNumbers`,
 whose integer replies the stores cannot read, and `duplicate()` copies that option: pass `stringNumbers: false`
-there if the client you start from has it. For glide, set `requestTimeout` above the slowest healthy script call
-and below the official packages' `storeTimeout` (10 s): the default, 250 ms, is shorter than a failover.
+there if the client you start from has it. A client with `enableOfflineQueue: false` refuses commands until it
+has connected, and the startup check runs as the stores are built: have the factory hand over a connected client
+(`lazyConnect: true`, then `await redis.connect()`), or the check fails under `'strict'` and verifies nothing under
+`'warn'`.
+
+For glide, set `requestTimeout` above the slowest healthy script call and below the official packages'
+`storeTimeout` (10 s): the default, 250 ms, is shorter than a failover. glide also refuses calls past its
+`inflightRequestsLimit` (1000 by default) with `Reached maximum inflight requests`, and counts a script call twice
+against it: set it to at least twice the store calls a client runs at once, or give the stores a client of their
+own. A refused `complete()` leaves its record in flight until `lockTtl`, and the retry then runs the handler again.
 
 In a cluster, glide logs each `NOSCRIPT` (a replica promoted by a failover has no scripts cached) and each `MOVED`
 (a slot that moved) it recovers from as a `WARN` line on stdout, while the store call succeeds:
@@ -111,8 +133,21 @@ key with `%`, `{` and `}` escaped, so both keys always hash to one slot, whateve
 spread over the shards. (The documentation's Redis lock store increments one global counter next to the lock,
 which a cluster refuses with `CROSSSLOT`.) An idempotency record is one key, the documentation's layout. A
 prefix must not contain a brace, and neither must ioredis's `keyPrefix`, which applies on top of it:
-`ioredisRunner()` refuses a client whose `keyPrefix` has one. Every script runs on the primary, whatever the
-client reads from.
+`ioredisRunner()` refuses a client whose `keyPrefix` has one.
+
+Every script has to run on a primary. ioredis sends them there whatever its `scaleReads`. Give the stores a glide
+client that reads from the primary, glide's default: with `readFrom` set to `preferReplica` or an `AZAffinity`
+mode, glide marks every connection read-only, and after a planned failover (`CLUSTER FAILOVER`) it keeps sending
+the scripts to the demoted primary, which runs them as a replica and fails them (`Attempted to access a non local
+key in a cluster node`) until glide refreshes its slot map, up to a minute later. An application that reads from
+replicas through glide needs a second client for the stores.
+
+While a slot migrates key by key (`MIGRATE`, what `valkey-cli --cluster reshard` does by default), the server
+refuses a script whose keys are not all on one side of the move, so `acquire()` of a lock that is not held, in
+that slot, fails with `TRYAGAIN` (glide) or `Too many Cluster redirections` (ioredis), and the job skips its tick;
+`renew()` and `release()` keep working. That lasts as long as the slot stays open: milliseconds for a slot of a
+few thousand keys, seconds for hundreds of thousands, and until `valkey-cli --cluster fix` after a reshard that
+was interrupted. On Valkey 9, `--cluster-use-atomic-slot-migration` moves a slot whole, and no call fails.
 
 ## Fencing tokens
 
@@ -146,7 +181,8 @@ few fixed names (`@Locked('jobs:export')`) cost a few kilobytes either way.
   `+@read +@write` cover, plus **`time`**, which only `@fast` holds: the lock store draws tokens from it. A user
   without `+time` fails every `acquire()` inside the script, and `ACL DRYRUN` answers `OK` all the same, so the
   startup check refuses to start. `+info` lets the check read the eviction policy and the server's role (glide's
-  standalone client needs it to connect anyway).
+  standalone client needs it to connect anyway). In a cluster the clients need a few more to find the slots:
+  `+ping +cluster|slots` for glide, `+cluster|slots +cluster|info` for an ioredis `Cluster`.
 - Clocks on NTP, which lock expiry relies on already. Persistence (AOF `everysec`) where losing idempotency
   records on a restart is not acceptable; tokens do not need it.
 
@@ -177,9 +213,16 @@ the store cannot read, such as an idempotency record it did not write, throws `V
 releases the lock first (if it holds it), best-effort. So does a lock `acquire()` that fails on the client (its
 timeout, a dropped connection): the script may still run on the server, and `@nestjs/locks` gives back no lock
 whose `acquire()` rejected, so the store sends the owner-checked release behind it, without waiting for it, and
-rethrows the error. A fence key that holds anything but a token the store wrote, or one at 2^53 - 2 or above,
-fails `acquire()` with the script's own error (`locks.acquire: the fence holds no token this store can extend`)
-before anything is written. Out of memory, only `acquire()` fails: see below.
+rethrows the error. A fence key holding a string that is not a token the store wrote, or one at 2^53 - 2 or
+above, fails `acquire()` with the script's own error (`locks.acquire: the fence holds no token this store can
+extend`) before anything is written; a key of another type where the store expects its own (a hash or a list
+under a fence, a string under an idempotency record) fails the call with the server's `WRONGTYPE`, also before
+anything is written. Out of memory, only `acquire()` fails: see below.
+
+An ioredis error from the server carries the command it answered (`error.command.args`): the keys, the owner
+and, for `complete()`, the stored response, which a logger that prints the error object writes out, as Nest's
+does for `@nestjs/idempotency`'s store failures. `@nestjs/idempotency`'s `encryption` keeps the response sealed
+there too. glide's errors carry no arguments.
 
 ## Out of memory
 
@@ -199,7 +242,9 @@ something new and finish what has started:
 
 - **Idempotency:** the same hash at `idem:<key>`, with the same fields and scripts (`complete()`'s has one line
   more, its `allow-oom` flag), so instances on the recipe and on this store read each other's records; switch at
-  any time, during a rolling deploy too.
+  any time, during a rolling deploy too. A recipe client with an ioredis `keyPrefix` keeps its records at
+  `<keyPrefix>idem:<key>`: a store on that client reads them as they are, and a store on glide, which has no
+  `keyPrefix`, needs `prefix: '<keyPrefix>idem:'`.
 - **Locks:** the keys differ (`locks:key:<key>` and `locks:fencing-token` there), so old and new instances do not
   exclude each other. Stop every instance, then start them on this store. Its tokens are far above any value the
   recipe's counter reached, so resources fenced with old tokens accept the new ones.

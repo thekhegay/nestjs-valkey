@@ -34,6 +34,10 @@ interface CustomCommand {
  * instead, routed by its keys the same way, and through `invokeScript` on NOSCRIPT: glide 2.x is
  * slow to pass large script arguments to its core. The runner never closes the client.
  *
+ * Give the stores a client that reads from the primary (`readFrom: 'primary'`, the default). One
+ * that reads from replicas marks every connection read-only, and after a planned failover sends
+ * the scripts to the demoted primary, which fails them, until glide refreshes its slot map.
+ *
  * Set `requestTimeout` above the slowest healthy script call and below the `storeTimeout` of
  * `@nestjs/idempotency` and of `@nestjs/locks` from 0.0.4 (10 s by default in both): glide's
  * default, 250 ms, is shorter than a failover. glide logs each NOSCRIPT and MOVED it recovers

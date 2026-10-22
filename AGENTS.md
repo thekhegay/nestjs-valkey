@@ -14,9 +14,13 @@ how to work in the repository and why it is shaped the way it is.
   `run(script, keys, args)`; the stores know nothing else about the client.
 - `src/internal`: key and hash-tag handling, reply normalisation, script
   caching and NOSCRIPT recovery, the startup server check.
-- `test/unit` needs nothing. `test/server`, `test/cluster`, `test/behaviour` and
-  `test/consumers` need the Docker stack (`pnpm servers:up`); `test/chaos` runs
-  cluster failovers under load and is opt-in (`pnpm test:chaos`, nightly in CI).
+- `test/unit` needs nothing, and `test/types` is only typechecked
+  (`pnpm typecheck`). `test/contract`, `test/server`, `test/cluster`,
+  `test/behaviour`, `test/compat`, `test/nest` and `test/consumers` need the
+  Docker stack (`pnpm servers:up`), and so does `test/noscript`, which flushes
+  the script cache on every node and runs alone, after the others. `test/chaos`
+  runs cluster failovers under load and is opt-in (`pnpm test:chaos`, nightly
+  in CI).
 
 Every subpath export imports only its own peer: `nestjs-valkey/locks` must not
 pull in `@nestjs/idempotency`, and nothing outside `src/glide` imports glide.

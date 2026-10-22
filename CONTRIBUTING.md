@@ -27,7 +27,8 @@ pnpm lint
 pnpm check:package    # publint, attw and the tarball contents
 ```
 
-Set `REDIS_URL` (and `pnpm servers:up --profile redis`, which starts Redis on 16380) to run the server suite against Redis as well. A change to a script needs
+To run the server suite against Redis as well, start it with
+`docker compose -f docker/compose.yml --profile redis up -d --wait` (Redis on 16380) and set `REDIS_URL=redis://127.0.0.1:16380`. A change to a script needs
 a test that fails without it on a real server; a green test that would stay
 green with the fix removed proves nothing.
 
