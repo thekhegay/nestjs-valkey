@@ -20,4 +20,4 @@ export function fakeRunner(reply: (call: Call) => unknown = () => 1): ScriptRunn
 }
 
 /** The probe's reply for a healthy server. */
-export const HEALTHY: unknown[] = [null, 'noeviction', null];
+export const HEALTHY: unknown[] = [null, 'noeviction', null, 'master'];

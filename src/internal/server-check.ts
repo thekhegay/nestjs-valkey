@@ -6,16 +6,18 @@ import type { ScriptRunner, StartupCheck } from './types.js';
 /**
  * No keys: in a cluster, the runner sends it to a primary. `pcall` turns an ACL refusal into a
  * value instead of an error. `CONFIG GET` is not allowed from a script, and a separate `CONFIG`
- * call is often closed on managed services, so the policy is read from `INFO memory`.
+ * call is often closed on managed services, so the policy is read from `INFO memory`, and the
+ * role from `INFO replication` in the same call (`ROLE` may not run in a script).
  */
 export const PROBE = defineScript(
   'server.probe',
   `local time = redis.pcall('TIME')
-local info = redis.pcall('INFO', 'memory')
+local info = redis.pcall('INFO', 'memory', 'replication')
 local timeError = type(time) == 'table' and time.err or false
 local policy = type(info) == 'string' and string.match(info, 'maxmemory_policy:([%w-]+)') or false
 local infoError = type(info) == 'table' and info.err or false
-return {timeError, policy, infoError}
+local role = type(info) == 'string' and string.match(info, '\\nrole:(%a+)') or false
+return {timeError, policy, infoError, role}
 `,
 );
 
@@ -37,9 +39,10 @@ export interface ServerCheckOptions {
 /**
  * Runs the probe through the store's own runner and acts on what it finds. A lock store whose
  * ACL user may not run `TIME` always fails: every `acquire()` would fail inside the script, and
- * `ACL DRYRUN` cannot tell, since it checks only the outer `EVALSHA`. A `maxmemory-policy` other
- * than `noeviction`, an `INFO` the user may not run, and a server that does not answer are
- * warnings under `'warn'` and failures under `'strict'`. In a cluster the probe reads one primary.
+ * `ACL DRYRUN` cannot tell, since it checks only the outer `EVALSHA`. A replica (a client pointed
+ * at one, or behind Sentinel with `role: 'slave'`), a `maxmemory-policy` other than `noeviction`,
+ * an `INFO` the user may not run, and a server that does not answer are warnings under `'warn'`
+ * and failures under `'strict'`. In a cluster the probe reads one primary.
  */
 export async function runServerCheck(runner: ScriptRunner, options: ServerCheckOptions): Promise<void> {
   const { store, mode, needsTime } = options;
@@ -63,13 +66,13 @@ export async function runServerCheck(runner: ScriptRunner, options: ServerCheckO
     );
     return;
   }
-  if (!Array.isArray(reply) || reply.length !== 3) {
+  if (!Array.isArray(reply) || reply.length !== 4) {
     problem(
       'the server check got a reply it cannot read, so the ACL grants and maxmemory-policy were not verified',
     );
     return;
   }
-  const [timeError, policy, infoError] = reply.map((value: unknown) =>
+  const [timeError, policy, infoError, role] = reply.map((value: unknown) =>
     typeof value === 'string' ? value : null,
   );
 
@@ -77,6 +80,12 @@ export async function runServerCheck(runner: ScriptRunner, options: ServerCheckO
     throw new Error(
       `${store}: the ACL user may not run TIME inside a script (${timeError}). Every acquire() would fail: ` +
         'grant +time to the ACL user (fencing tokens are drawn from the server clock)',
+    );
+  }
+  if (role === 'slave') {
+    problem(
+      'the server is a replica (role:slave): the stores write on every call, which a replica refuses with ' +
+        'READONLY or keeps to itself. Point the client at the primary',
     );
   }
   if (infoError !== null || policy === null) {

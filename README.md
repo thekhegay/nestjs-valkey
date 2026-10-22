@@ -143,8 +143,8 @@ few fixed names (`@Locked('jobs:export')`) cost a few kilobytes either way.
   (`+@scripting` covers both). Inside the scripts: `exists get set pexpire del hset hmget hget hdel`, which
   `+@read +@write` cover, plus **`time`**, which only `@fast` holds: the lock store draws tokens from it. A user
   without `+time` fails every `acquire()` inside the script, and `ACL DRYRUN` answers `OK` all the same, so the
-  startup check refuses to start. `+info` lets the check read the eviction policy (glide's standalone client
-  needs it to connect anyway).
+  startup check refuses to start. `+info` lets the check read the eviction policy and the server's role (glide's
+  standalone client needs it to connect anyway).
 - Clocks on NTP, which lock expiry relies on already. Persistence (AOF `everysec`) where losing idempotency
   records on a restart is not acceptable; tokens do not need it.
 
@@ -158,6 +158,7 @@ reads only that one:
 | Finding                                  | `'warn'` (default) | `'strict'`    |
 | ---------------------------------------- | ------------------ | ------------- |
 | the user may not run `TIME` (locks only) | startup fails      | startup fails |
+| the server is a replica (`role:slave`)   | warning            | startup fails |
 | `maxmemory-policy` is not `noeviction`   | warning            | startup fails |
 | `INFO` refused, policy unreadable        | warning            | startup fails |
 | no answer within 3 s, or the call fails  | warning            | startup fails |

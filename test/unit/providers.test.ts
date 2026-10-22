@@ -86,6 +86,7 @@ describe('valkeyLockStore() and valkeyIdempotencyStore()', () => {
       "ERR ACL failure in script: no permissions to run the 'time' command",
       'noeviction',
       null,
+      'master',
     ]);
     await expect(boot([LocksModule.forRoot()], [valkeyLockStore({ runner })])).rejects.toThrow(
       /grant \+time/,
@@ -93,7 +94,7 @@ describe('valkeyLockStore() and valkeyIdempotencyStore()', () => {
   });
 
   it('start with one warning per store under warn, and fail under strict, on another eviction policy', async () => {
-    const runner = fakeRunner(() => [null, 'volatile-lru', null]);
+    const runner = fakeRunner(() => [null, 'volatile-lru', null, 'master']);
     app = await boot(
       [LocksModule.forRoot(), IdempotencyModule.forRoot()],
       [valkeyLockStore({ runner }), valkeyIdempotencyStore({ runner })],
