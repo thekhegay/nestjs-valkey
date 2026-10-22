@@ -71,8 +71,9 @@ line; `ioredis` is not a peer at all, the runner is structural.
   the CI checks green.
 - Releases: run the **Release PR** workflow from the Actions tab with the bump.
   It writes the CHANGELOG section with conventional-changelog and opens
-  `chore(release): vX.Y.Z` with labels. Merging it runs `release.yml`, which
-  refuses a changelog that misses a commit merged after the cut, stages the
+  `chore(release): vX.Y.Z` with labels. CI on the release branch refuses a
+  changelog that misses a commit merged after the cut (run Release PR again);
+  merging it runs `release.yml`, which checks that once more, stages the
   version on npm with provenance (`npm stage publish`), and tags it. The
   version goes live once the maintainer approves the staged version with 2FA.
   Never bump the version or edit CHANGELOG.md by hand.

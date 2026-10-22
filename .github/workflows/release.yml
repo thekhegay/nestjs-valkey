@@ -84,7 +84,9 @@ jobs:
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       # A feat or fix merged after the release pull request was cut would ship
-      # with no line in CHANGELOG.md. The cure is Release PR again, same bump.
+      # with no line in CHANGELOG.md. CI ran this on the release branch before
+      # it merged; here it can only stop the publish (see the message for the
+      # cure).
       - name: Check the changelog names everything that ships
         run: pnpm release:check
 

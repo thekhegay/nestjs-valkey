@@ -20,6 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The release check reads every commit since the last tag.
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -31,6 +34,11 @@ jobs:
       - run: pnpm build
       - run: pnpm test
       - run: pnpm check:package
+      # On a release branch, the changelog it was cut with has to name every
+      # commit that ships, before it merges: once merged, the cure is a revert
+      # of the release commit. release.yml checks again on main.
+      - if: startsWith(github.head_ref || github.ref_name, 'release/')
+        run: pnpm release:check
 
   servers:
     name: servers (valkey ${{ matrix.valkey }}, redis ${{ matrix.redis }})
