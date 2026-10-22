@@ -34,13 +34,16 @@ describe('the startup check', () => {
 
   it('fails a lock store whose user may not run TIME, under warn and strict alike', async () => {
     for (const mode of ['warn', 'strict'] as const) {
-      const { done } = check(() => [DENIED, 'noeviction', null], { mode });
+      const { done } = check(() => [DENIED, 'noeviction', null, 'master'], { mode });
       await expect(done).rejects.toThrow(/grant \+time to the ACL user/);
     }
   });
 
   it('ignores TIME for a store that never calls it', async () => {
-    const { done, warn } = check(() => [DENIED, 'noeviction', null], { needsTime: false, mode: 'strict' });
+    const { done, warn } = check(() => [DENIED, 'noeviction', null, 'master'], {
+      needsTime: false,
+      mode: 'strict',
+    });
     await expect(done).resolves.toBeUndefined();
     expect(warn).not.toHaveBeenCalled();
   });
@@ -48,15 +51,16 @@ describe('the startup check', () => {
   const findings: [string, () => unknown, RegExp][] = [
     [
       'a maxmemory-policy other than noeviction',
-      () => [null, 'volatile-lru', null],
+      () => [null, 'volatile-lru', null, 'master'],
       /maxmemory-policy is volatile-lru/,
     ],
     [
       'an INFO the user may not run',
-      () => [null, null, 'NOPERM no info'],
+      () => [null, null, 'NOPERM no info', null],
       /could not read maxmemory-policy \(NOPERM/,
     ],
-    ['an INFO without the policy', () => [null, false, false], /could not read maxmemory-policy;/],
+    ['an INFO without the policy', () => [null, false, false, 'master'], /could not read maxmemory-policy;/],
+    ['a replica', () => [null, 'noeviction', null, 'slave'], /is a replica \(role:slave\).*READONLY/],
     [
       'a server that does not answer',
       () => new Promise(() => undefined),
@@ -68,6 +72,7 @@ describe('the startup check', () => {
       /did not complete \(Connection is closed\.\)/,
     ],
     ['a reply it cannot read', () => 'OK', /cannot read/],
+    ['a reply of the probe before it read the role', () => [null, 'noeviction', null], /cannot read/],
   ];
 
   for (const [name, reply, message] of findings) {

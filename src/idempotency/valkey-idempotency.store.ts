@@ -121,7 +121,7 @@ export class ValkeyIdempotencyStore implements IdempotencyStore, OnModuleInit {
   }
 
   /**
-   * Runs one script without keys through the runner and acts per `startupCheck`: a
+   * Runs one script without keys through the runner and acts per `startupCheck`: a replica, a
    * `maxmemory-policy` other than `noeviction` (a `volatile-*` policy evicts these records too,
    * since each has an expiry), an unreadable `INFO` and a server that does not answer within 3 s
    * are warnings under `'warn'` and failures under `'strict'`. `false` skips it. In a cluster it

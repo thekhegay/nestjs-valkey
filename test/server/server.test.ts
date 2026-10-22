@@ -336,3 +336,43 @@ describe(
     });
   },
 );
+
+const noSentinel = missing('VALKEY_SENTINEL');
+describe(
+  `the startup check behind Sentinel${noSentinel ? ` (skipped: ${noSentinel})` : ''}`,
+  { skip: noSentinel !== false },
+  () => {
+    it('warns about a replica, and fails on it under strict, where every acquire() would fail', async () => {
+      const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      const { host, port, name } = env.sentinel!;
+      const replica = new Redis({ sentinels: [{ host, port }], name, role: 'slave', commandTimeout: 5_000 });
+      const primary = new Redis({ sentinels: [{ host, port }], name, commandTimeout: 5_000 });
+      try {
+        const runner = ioredisRunner(replica);
+        await new ValkeyLockStore(runner).checkServer();
+        await new ValkeyIdempotencyStore(runner).checkServer();
+        expect(warn).toHaveBeenCalledTimes(2);
+        for (const [message] of warn.mock.calls)
+          expect(String(message)).toMatch(/is a replica \(role:slave\)/);
+        await expect(new ValkeyLockStore(runner, { startupCheck: 'strict' }).checkServer()).rejects.toThrow(
+          /ValkeyLockStore: the server is a replica/,
+        );
+        await expect(
+          new ValkeyIdempotencyStore(runner, { startupCheck: 'strict' }).checkServer(),
+        ).rejects.toThrow(/ValkeyIdempotencyStore: the server is a replica/);
+        await expect(
+          new ValkeyLockStore(runner, { startupCheck: false }).acquire(randomUUID(), 'a', 10_000),
+        ).rejects.toThrow(/READONLY/);
+
+        warn.mockClear();
+        await new ValkeyLockStore(ioredisRunner(primary), { startupCheck: 'strict' }).checkServer();
+        await new ValkeyIdempotencyStore(ioredisRunner(primary), { startupCheck: 'strict' }).checkServer();
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        replica.disconnect();
+        primary.disconnect();
+        warn.mockRestore();
+      }
+    });
+  },
+);

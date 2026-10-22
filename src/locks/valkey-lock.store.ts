@@ -107,9 +107,9 @@ export class ValkeyLockStore implements LockStore, OnModuleInit {
   /**
    * Runs one script without keys through the runner and acts per `startupCheck`: an ACL user
    * that may not run `TIME` fails it under both `'warn'` and `'strict'` (every `acquire()` would
-   * fail); a `maxmemory-policy` other than `noeviction`, an unreadable `INFO` and a server that
-   * does not answer within 3 s are warnings under `'warn'` and failures under `'strict'`. `false`
-   * skips it. In a cluster it reads one primary. `onModuleInit()` calls it; call it yourself for
+   * fail); a replica, a `maxmemory-policy` other than `noeviction`, an unreadable `INFO` and a
+   * server that does not answer within 3 s are warnings under `'warn'` and failures under
+   * `'strict'`. `false` skips it. In a cluster it reads one primary. `onModuleInit()` calls it; call it yourself for
    * a store created outside Nest.
    */
   checkServer(): Promise<void> {
