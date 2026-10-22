@@ -16,14 +16,16 @@ export interface IoredisLike {
 interface ConnectionOptions {
   commandTimeout?: number;
   stringNumbers?: boolean;
+  keyPrefix?: string;
 }
 
 /**
  * A `ScriptRunner` over an ioredis or iovalkey client (`Redis` or `Cluster`). It sends EVALSHA,
  * and on NOSCRIPT one EVAL with the source, which a `Cluster` routes by the keys and which caches
  * the script on that node. The client's `keyPrefix` applies to the keys on top of the store's
- * prefix, to a lock and its fence alike: it must not contain a brace. The runner never closes the
- * client.
+ * prefix, to a lock and its fence alike, so a `keyPrefix` with a brace is refused, as a store's
+ * prefix with one is: it would become the cluster hash tag and put every key on one shard, or,
+ * as `{}`, split a lock from its fence. The runner never closes the client.
  *
  * Give the client a `commandTimeout`: `@nestjs/locks` bounds no store call, so `acquire()` and
  * `release()` against a server that stops answering wait as long as the client does. The runner
@@ -47,6 +49,16 @@ export function ioredisRunner(client: IoredisLike): ScriptRunner {
         'store call would fail after its script ran. Give the stores a client without it: ' +
         'redis.duplicate({ stringNumbers: false, commandTimeout: 2000 })',
     );
+  }
+  // A Cluster copies redisOptions.keyPrefix into its own options; check both all the same.
+  for (const keyPrefix of [options?.keyPrefix, options?.redisOptions?.keyPrefix]) {
+    if (typeof keyPrefix === 'string' && /[{}]/.test(keyPrefix)) {
+      throw new TypeError(
+        'ioredisRunner(): the client\'s keyPrefix must not contain "{" or "}": it applies on top of the ' +
+          "stores' prefix, so a brace would make it the cluster hash tag and put every key on one shard, " +
+          'or, as "{}", send a lock and its fence to two slots',
+      );
+    }
   }
   const timeout = connection?.commandTimeout;
   if (options && timeout == null) {

@@ -138,6 +138,40 @@ describe('ioredisRunner()', () => {
     parent.disconnect();
   });
 
+  it('refuses a keyPrefix with a brace, for Redis and Cluster of every flavour and for a duplicate', () => {
+    const at = [{ host: '127.0.0.1', port: 1 }];
+    const commandTimeout = 2000;
+    for (const keyPrefix of ['{app}:', 'app:{}:', 'app:{', 'app}:']) {
+      const parent = new Redis({ lazyConnect: true, commandTimeout, keyPrefix });
+      const clients = [
+        parent,
+        new Ioredis5({ lazyConnect: true, commandTimeout, keyPrefix }),
+        new Valkey({ lazyConnect: true, commandTimeout, keyPrefix }),
+        new Cluster(at, { lazyConnect: true, keyPrefix, redisOptions: { commandTimeout } }),
+        new Ioredis5Cluster(at, { lazyConnect: true, keyPrefix, redisOptions: { commandTimeout } }),
+        new IovalkeyCluster(at, { lazyConnect: true, keyPrefix, redisOptions: { commandTimeout } }),
+        // A Cluster applies a keyPrefix given in redisOptions too.
+        new Cluster(at, { lazyConnect: true, redisOptions: { commandTimeout, keyPrefix } }),
+        // duplicate() copies it from the client it is made from.
+        parent.duplicate(),
+      ];
+      for (const client of clients) {
+        expect(() => ioredisRunner(client), keyPrefix).toThrow(TypeError);
+        expect(() => ioredisRunner(client), keyPrefix).toThrow(/keyPrefix must not contain/);
+        client.disconnect();
+      }
+    }
+    const plain = [
+      new Redis({ lazyConnect: true, commandTimeout, keyPrefix: 'app:' }),
+      new Cluster(at, { lazyConnect: true, keyPrefix: 'app:', redisOptions: { commandTimeout } }),
+    ];
+    for (const client of plain) {
+      expect(() => ioredisRunner(client)).not.toThrow();
+      client.disconnect();
+    }
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('sends EVALSHA with every key counted, and EVAL with the source on NOSCRIPT only', async () => {
     const evalsha = vi.fn(async () => {
       throw Object.assign(new Error('NOSCRIPT No matching script. Please use EVAL.'), { name: 'ReplyError' });

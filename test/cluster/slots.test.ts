@@ -140,6 +140,36 @@ describe(`in a cluster${skip ? ` (skipped: ${skip})` : ''}`, { skip: skip !== fa
     });
   }
 
+  it('puts an ioredis keyPrefix in front of a lock and its fence alike, one slot each, and refuses one with a brace', async () => {
+    const keyPrefix = `kp:${randomUUID()}:`;
+    const client = new Cluster(env.cluster!, { keyPrefix, redisOptions: { commandTimeout: 5_000 } });
+    try {
+      const locks = new ValkeyLockStore(ioredisRunner(client), { startupCheck: false });
+      const slots = new Set<number>();
+      for (let i = 0; i < 16; i++) {
+        const lock = `${keyPrefix}locks:{${hashTag(`job:${i}`)}}`;
+        expect((await locks.acquire(`job:${i}`, 'a', 10_000)).acquired).toBe(true);
+        expect(await server.get(lock)).toBe('a');
+        expect(await server.exists(`${lock}:fence`)).toBe(1);
+        expect(await slotOf(`${lock}:fence`)).toBe(await slotOf(lock));
+        slots.add(await slotOf(lock));
+        expect(await locks.release(`job:${i}`, 'a')).toBe(true);
+      }
+      expect(slots.size).toBe(16);
+    } finally {
+      client.disconnect();
+    }
+    for (const braced of [`{${keyPrefix}}`, `${keyPrefix}{}:`]) {
+      const cluster = new Cluster(env.cluster!, {
+        lazyConnect: true,
+        keyPrefix: braced,
+        redisOptions: { commandTimeout: 5_000 },
+      });
+      expect(() => ioredisRunner(cluster)).toThrow(/keyPrefix must not contain/);
+      cluster.disconnect();
+    }
+  });
+
   it('refuses an ioredis Cluster whose node connections return integers as strings (redisOptions.stringNumbers)', async () => {
     const cluster = new Cluster(env.cluster!, {
       redisOptions: { commandTimeout: 5_000, stringNumbers: true },
