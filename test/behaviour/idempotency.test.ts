@@ -72,6 +72,22 @@ for (const target of coreTargets()) {
       });
     });
 
+    it('passes WRONGTYPE through for a string under the key, and leaves it as it was', async () => {
+      const key = randomUUID();
+      const idem = store();
+      await server.set(`idem:${key}`, 'not a record', 'PX', 60_000);
+      for (const call of [
+        () => idem.acquire(key, 'a', 'fp', 10_000),
+        () => idem.complete(key, 'a', response, 10_000),
+        () => idem.extend(key, 'a', 10_000),
+        () => idem.release(key, 'a'),
+      ]) {
+        await expect(call()).rejects.toThrow(/WRONGTYPE/);
+      }
+      expect(await server.get(`idem:${key}`)).toBe('not a record');
+      await server.del(`idem:${key}`);
+    });
+
     it('expires an in-flight lock after lockTtl, and fences off its stale owner', async () => {
       const key = randomUUID();
       const idem = store();
