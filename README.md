@@ -66,13 +66,15 @@ valkeyLockStore({
 });
 ```
 
-`@nestjs/locks` bounds no store call, so `acquire()` and `release()` against a server that stops answering wait as
-long as the client does; `ioredisRunner()` warns when the client has no `commandTimeout`. Keep that connection
-apart from one that runs `XREADGROUP BLOCK` or `BLPOP`: a `commandTimeout` applies to blocking commands too
+Without a `commandTimeout`, a call against a server that stops answering stays pending in the client until the
+connection closes. `@nestjs/locks` 0.0.3 waits for it that long; from 0.0.4 it stops waiting after its
+`storeTimeout`, as `@nestjs/idempotency` does (10 s by default in both), but the command stays queued in the client,
+as does every later one. `ioredisRunner()` warns when the client has no `commandTimeout`. Keep that connection apart
+from one that runs `XREADGROUP BLOCK` or `BLPOP`: a `commandTimeout` applies to blocking commands too
 (`redis.duplicate({ commandTimeout: 2000 })` makes one). `ioredisRunner()` refuses a client with `stringNumbers`,
 whose integer replies the stores cannot read, and `duplicate()` copies that option: pass `stringNumbers: false`
 there if the client you start from has it. For glide, set `requestTimeout` above the slowest healthy script call
-and below `@nestjs/idempotency`'s `storeTimeout` (10 s): the default, 250 ms, is shorter than a failover.
+and below the official packages' `storeTimeout` (10 s): the default, 250 ms, is shorter than a failover.
 
 In a cluster, glide logs each `NOSCRIPT` (a replica promoted by a failover has no scripts cached) and each `MOVED`
 (a slot that moved) it recovers from as a `WARN` line on stdout, while the store call succeeds:

@@ -128,7 +128,8 @@ describe('ioredisRunner()', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  const noTimeout = /no commandTimeout/;
+  // @nestjs/locks bounds its store calls from 0.0.4 (storeTimeout); the command stays in the client.
+  const noTimeout = /no commandTimeout.*0\.0\.3 waits.*storeTimeout.*stays queued/;
 
   it('warns once per runner when the client has no commandTimeout, for Redis and Cluster of every flavour', async () => {
     const clients = [

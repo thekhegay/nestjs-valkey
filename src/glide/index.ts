@@ -34,10 +34,11 @@ interface CustomCommand {
  * instead, routed by its keys the same way, and through `invokeScript` on NOSCRIPT: glide 2.x is
  * slow to pass large script arguments to its core. The runner never closes the client.
  *
- * Set `requestTimeout` above the slowest healthy script call and below `@nestjs/idempotency`'s
- * `storeTimeout`: glide's default, 250 ms, is shorter than a failover. glide logs each NOSCRIPT
- * and MOVED it recovers from in a cluster as a `WARN` line on stdout; `Logger.setLoggerConfig()`
- * from `@valkey/valkey-glide` quiets it (`'error'`) or sends it to a file.
+ * Set `requestTimeout` above the slowest healthy script call and below the `storeTimeout` of
+ * `@nestjs/idempotency` and of `@nestjs/locks` from 0.0.4 (10 s by default in both): glide's
+ * default, 250 ms, is shorter than a failover. glide logs each NOSCRIPT and MOVED it recovers
+ * from in a cluster as a `WARN` line on stdout; `Logger.setLoggerConfig()` from
+ * `@valkey/valkey-glide` quiets it (`'error'`) or sends it to a file.
  */
 export function glideRunner(client: BaseClient): ScriptRunner {
   if (!(client instanceof BaseClient)) {

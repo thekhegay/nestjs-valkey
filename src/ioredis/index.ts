@@ -27,10 +27,12 @@ interface ConnectionOptions {
  * prefix with one is: it would become the cluster hash tag and put every key on one shard, or,
  * as `{}`, split a lock from its fence. The runner never closes the client.
  *
- * Give the client a `commandTimeout`: `@nestjs/locks` bounds no store call, so `acquire()` and
- * `release()` against a server that stops answering wait as long as the client does. The runner
- * warns once when the client has none. A `commandTimeout` also applies to blocking commands, so
- * give the stores a connection of their own: `redis.duplicate({ commandTimeout: 2000 })`.
+ * Give the client a `commandTimeout`. Without one, a call against a server that stops answering
+ * stays pending in the client until the connection closes: `@nestjs/locks` 0.0.3 waits for it
+ * that long, and from 0.0.4 it stops waiting after its `storeTimeout`, as `@nestjs/idempotency`
+ * does (10 s by default), while the command stays queued. The runner warns once when the client
+ * has none. A `commandTimeout` also applies to blocking commands, so give the stores a
+ * connection of their own: `redis.duplicate({ commandTimeout: 2000 })`.
  *
  * A client with `stringNumbers` (or a `Cluster` with it in `redisOptions`) is refused: it returns
  * the scripts' integer replies as strings, which the stores cannot read once the script has run.
@@ -63,8 +65,10 @@ export function ioredisRunner(client: IoredisLike): ScriptRunner {
   const timeout = connection?.commandTimeout;
   if (options && timeout == null) {
     new Logger('nestjs-valkey').warn(
-      'ioredisRunner(): the client has no commandTimeout, and @nestjs/locks bounds no store call: ' +
-        'acquire() and release() against a server that stops answering wait as long as the client does',
+      'ioredisRunner(): the client has no commandTimeout, so a store call against a server that stops ' +
+        'answering stays pending until the connection closes. @nestjs/locks 0.0.3 waits for it that long; ' +
+        '@nestjs/locks 0.0.4 and @nestjs/idempotency stop waiting after their storeTimeout, but the command ' +
+        'stays queued in the client',
     );
   }
   return {
