@@ -34,6 +34,6 @@ green with the fix removed proves nothing.
 
 ## Commits and pull requests
 
-Conventional commits, lowercase subject, one line. The pull request title is
-checked by the same rule. Releases are cut from the Actions tab by the Release
+Conventional commits, lowercase subject, one line. CI checks every commit
+subject and the pull request title by that rule. Releases are cut from the Actions tab by the Release
 PR workflow, never by hand.

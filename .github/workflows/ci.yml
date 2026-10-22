@@ -21,7 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The release check reads every commit since the last tag.
+          # The release check reads every commit since the last tag, and the
+          # subject check every commit the branch brings.
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
@@ -29,6 +30,13 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # main takes rebase merges only: every commit lands as it is, and the
+      # changelog is written from their subjects.
+      - if: github.event_name == 'pull_request' || github.ref_name != 'main'
+        run: node scripts/check-commits.mjs "origin/$BASE..$HEAD_SHA"
+        env:
+          BASE: ${{ github.base_ref || 'main' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm build
