@@ -3,7 +3,7 @@ import { GlideClient, Decoder } from '@valkey/valkey-glide';
 import type { Cluster, Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { glideRunner } from '../../src/glide/index.js';
-import { ValkeyStoreError } from '../../src/index.js';
+import { ValkeyStoreError, type ScriptRunner } from '../../src/index.js';
 import { hashTag } from '../../src/internal/keys.js';
 import { ValkeyLockStore, type ValkeyLockStoreOptions } from '../../src/locks/index.js';
 import { admin, coreTargets, env, missing, type Connection } from '../support/servers.js';
@@ -121,6 +121,27 @@ for (const target of coreTargets()) {
       await server.set(`${lockKey(key)}:fence`, String(2 ** 53 - 3), 'PX', 60_000);
       expect(await token(locks, key, 'a')).toBe(2 ** 53 - 2);
       expect(await server.get(`${lockKey(key)}:fence`)).toBe(String(2 ** 53 - 2));
+    });
+
+    it('frees the lock when acquire() fails on the client after its script ran (a lost reply)', async () => {
+      const key = randomUUID();
+      const { runner } = pool[0]!;
+      const lost = new Error('Command timed out');
+      const losing: ScriptRunner = {
+        async run(script, keys, args) {
+          const reply = await runner.run(script, keys, args);
+          if (script.name === 'locks.acquire') throw lost;
+          return reply;
+        },
+      };
+      await expect(
+        new ValkeyLockStore(losing, { startupCheck: false }).acquire(key, 'a', 60_000),
+      ).rejects.toBe(lost);
+      // The release goes out behind the failed call, unawaited.
+      for (let i = 0; i < 50 && (await server.exists(lockKey(key))) === 1; i++) await sleep(20);
+      expect(await server.exists(lockKey(key))).toBe(0);
+      expect(await server.exists(`${lockKey(key)}:fence`)).toBe(1);
+      expect((await store().acquire(key, 'b', 10_000)).acquired).toBe(true);
     });
 
     it("hands out tokens far above any value the documentation's shared counter reaches", async () => {
