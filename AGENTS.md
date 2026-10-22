@@ -63,10 +63,11 @@ line; `ioredis` is not a peer at all, the runner is structural.
 
 ## Commits, pull requests and releases
 
-- Conventional commits, lowercase subject, a single line, no body. The pull
-  request title is checked on CI. No AI or assistant attribution anywhere: no
-  `Co-Authored-By` trailers, no "generated with" lines, in commits, code or
-  docs.
+- Conventional commits, lowercase subject, a single line, no body. CI checks
+  every commit subject a pull request brings (`scripts/check-commits.mjs`:
+  rebase merges land each commit as it is) and the pull request title. No AI
+  or assistant attribution anywhere: no `Co-Authored-By` trailers, no
+  "generated with" lines, in commits, code or docs.
 - `main` is protected: changes land through pull requests, rebase-merged, with
   the CI checks green.
 - Releases: run the **Release PR** workflow from the Actions tab with the bump.
