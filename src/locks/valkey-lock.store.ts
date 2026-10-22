@@ -69,11 +69,18 @@ export class ValkeyLockStore implements LockStore, OnModuleInit {
     checkText(STORE, 'owner', owner);
     checkDuration(STORE, 'ttl', ttl);
     const lock = this.#lockKey(key);
-    const reply = await this.#run(
-      ACQUIRE,
-      [lock, `${lock}:fence`],
-      [owner, String(ttl), this.#fenceRetention],
-    );
+    let reply: unknown;
+    try {
+      reply = await this.#run(ACQUIRE, [lock, `${lock}:fence`], [owner, String(ttl), this.#fenceRetention]);
+    } catch (error) {
+      // A call that failed on the client (its timeout, a dropped connection) may still run, or have
+      // run, on the server, and `@nestjs/locks` gives back no lock whose acquire() rejected: free it
+      // (only if `owner` holds it) rather than leave it held by nobody until its ttl runs out. Sent
+      // on the same client after the acquire, not awaited, its outcome ignored: the caller gets the
+      // error as it was.
+      void this.#run(RELEASE, [lock], [owner]).catch(() => undefined);
+      throw error;
+    }
     if (reply === 0) return { acquired: false };
     if (typeof reply === 'number' && Number.isSafeInteger(reply) && reply >= 1) {
       return { acquired: true, fencingToken: reply };

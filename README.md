@@ -170,9 +170,12 @@ timeouts, `NOPERM`, `OOM`, `READONLY` reach you as the client threw them. Bad ar
 whole number of milliseconds, a key with a lone surrogate, a prefix with a brace) throw before any call. A reply
 the store cannot read, such as an idempotency record it did not write, throws `ValkeyStoreError` from
 `nestjs-valkey`; the message never names a key, an owner or a stored response. `acquire()` that gets such a reply
-releases the lock first (if it holds it), best-effort. A fence key that holds anything but a token the store wrote,
-or one at 2^53 - 2 or above, fails `acquire()` with the script's own error (`locks.acquire: the fence holds no
-token this store can extend`) before anything is written. Out of memory, only `acquire()` fails: see below.
+releases the lock first (if it holds it), best-effort. So does a lock `acquire()` that fails on the client (its
+timeout, a dropped connection): the script may still run on the server, and `@nestjs/locks` gives back no lock
+whose `acquire()` rejected, so the store sends the owner-checked release behind it, without waiting for it, and
+rethrows the error. A fence key that holds anything but a token the store wrote, or one at 2^53 - 2 or above,
+fails `acquire()` with the script's own error (`locks.acquire: the fence holds no token this store can extend`)
+before anything is written. Out of memory, only `acquire()` fails: see below.
 
 ## Out of memory
 

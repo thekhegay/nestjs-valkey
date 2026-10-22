@@ -81,6 +81,27 @@ describe('ValkeyLockStore', () => {
     expect(refused.calls).toHaveLength(1);
   });
 
+  it('sends a release when acquire() fails on the client, since the script may still take the lock', async () => {
+    const timeout = new Error('Command timed out');
+    const releases: (() => unknown)[] = [
+      () => 1,
+      () => 0,
+      () => Promise.reject(new Error('Connection is closed.')),
+      () => new Promise(() => undefined),
+    ];
+    for (const release of releases) {
+      const runner = fakeRunner(({ script }) =>
+        script.name === 'locks.acquire' ? Promise.reject(timeout) : release(),
+      );
+      // Rethrown as it was, without waiting for the release (the last one never answers).
+      await expect(new ValkeyLockStore(runner).acquire('k', 'o', 1)).rejects.toBe(timeout);
+      expect(runner.calls.map(({ script, keys, args }) => [script.name, keys, args])).toEqual([
+        ['locks.acquire', ['locks:{k}', 'locks:{k}:fence'], ['o', '1', '60000']],
+        ['locks.release', ['locks:{k}'], ['o']],
+      ]);
+    }
+  });
+
   it('refuses bad arguments before reaching the server', async () => {
     const runner = fakeRunner();
     const store = new ValkeyLockStore(runner);
