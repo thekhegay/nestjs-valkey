@@ -87,6 +87,8 @@ for (const target of coreTargets()) {
       const pttl = await server.pttl(`${lockKey(key)}:fence`);
       expect(pttl).toBeGreaterThan(DAY + 55_000);
       expect(pttl).toBeLessThanOrEqual(DAY + 61_000);
+      // One slot: a single DEL in a cluster too.
+      await server.del(lockKey(key), `${lockKey(key)}:fence`);
     });
 
     it('keeps growing after the fence expired (fenceRetention: 1)', async () => {
@@ -121,6 +123,30 @@ for (const target of coreTargets()) {
       await server.set(`${lockKey(key)}:fence`, String(2 ** 53 - 3), 'PX', 60_000);
       expect(await token(locks, key, 'a')).toBe(2 ** 53 - 2);
       expect(await server.get(`${lockKey(key)}:fence`)).toBe(String(2 ** 53 - 2));
+      // That fence is kept until the clock reaches it, some 229 years: not on a shared server.
+      expect(await server.pttl(`${lockKey(key)}:fence`)).toBeGreaterThan(100 * 365 * DAY);
+      await server.del(lockKey(key), `${lockKey(key)}:fence`);
+    });
+
+    it('passes WRONGTYPE through for a key of another type under the fence, writing nothing', async () => {
+      const locks = store();
+      const writes: [string, (fence: string) => Promise<unknown>][] = [
+        ['hash', (fence) => server.hset(fence, 'f', 'v')],
+        ['list', (fence) => server.rpush(fence, 'v')],
+        ['set', (fence) => server.sadd(fence, 'v')],
+      ];
+      for (const [type, write] of writes) {
+        const key = randomUUID();
+        const fence = `${lockKey(key)}:fence`;
+        await write(fence);
+        const error = await locks.acquire(key, 'a', 10_000).catch((e: unknown) => e);
+        expect(error, type).toBeInstanceOf(Error);
+        expect(error, type).not.toBeInstanceOf(ValkeyStoreError);
+        expect(String((error as Error).message), type).toMatch(/WRONGTYPE/);
+        expect(await server.exists(lockKey(key)), type).toBe(0);
+        expect(await server.type(fence), type).toBe(type);
+        await server.del(fence);
+      }
     });
 
     it('frees the lock when acquire() fails on the client after its script ran (a lost reply)', async () => {
