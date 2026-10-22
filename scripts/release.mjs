@@ -157,8 +157,8 @@ function withPullRequest(line) {
 }
 
 // New Contributors and the compare link, taken from the notes GitHub would
-// generate itself. The release pull request is opened by github-actions, which
-// is not a contributor to anything the section lists.
+// generate itself, without bots: the release pull request is opened by
+// github-actions, and Dependabot's first bump is no one's first contribution.
 function footer() {
   const tag = `v${PKG.version}`;
   const previous = previousTag();
@@ -176,7 +176,7 @@ function footer() {
   ]);
   const newcomers = (notes.split('## New Contributors')[1] ?? '')
     .split('\n')
-    .filter((line) => line.startsWith('* @') && !line.startsWith('* @github-actions[bot]'));
+    .filter((line) => line.startsWith('* @') && !/^\* @\S+\[bot\]\s/.test(line));
   const full = /^\*\*Full Changelog\*\*: .+$/m.exec(notes)?.[0];
   return [newcomers.length ? `### 👋 New Contributors\n\n${newcomers.join('\n')}` : '', full ?? '']
     .filter(Boolean)
