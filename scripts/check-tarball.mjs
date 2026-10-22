@@ -1,9 +1,13 @@
 // What `npm publish` would ship: the built entry points, their types, the README and the license,
-// and nothing else (no sources, tests, maps or configuration).
+// and nothing else (no sources, tests, maps or configuration). Packed by npm, as release.yml's
+// `npm stage publish` packs it: pnpm drops and reorders manifest fields, and would apply a
+// publishConfig its own way.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-const packed = JSON.parse(execFileSync('pnpm', ['pack', '--dry-run', '--json'], { encoding: 'utf8' }));
+const [packed] = JSON.parse(
+  execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { encoding: 'utf8' }),
+).flat();
 const files = new Set(packed.files.map((file) => file.path));
 const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
 const problems = [];

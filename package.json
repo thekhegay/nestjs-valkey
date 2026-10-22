@@ -83,7 +83,7 @@
     "test:servers": "node --env-file=docker/servers.env node_modules/vitest/vitest.mjs run --project servers --project servers-exclusive",
     "test:consumers": "pnpm build && node --env-file=docker/servers.env node_modules/vitest/vitest.mjs run --project consumers",
     "test:chaos": "NVK_CHAOS=1 node --env-file=docker/servers.env node_modules/vitest/vitest.mjs run --project chaos --reporter=verbose",
-    "check:package": "pnpm build && publint --strict && attw --pack . --profile esm-only && node scripts/check-tarball.mjs",
+    "check:package": "pnpm build && publint --strict --pack npm && attw --pack . --profile esm-only && node scripts/check-tarball.mjs",
     "servers:up": "docker compose -f docker/compose.yml up -d --wait",
     "servers:down": "docker compose -f docker/compose.yml --profile redis down --volumes --remove-orphans",
     "release:prepare": "node scripts/release.mjs prepare",
