@@ -122,7 +122,7 @@
     "ioredis": "6.0.0",
     "ioredis5": "npm:ioredis@^5.11.1",
     "iovalkey": "0.4.0",
-    "oxlint": "^1.88.0",
+    "oxlint": "^1.89.0",
     "prettier": "^3.9.10",
     "publint": "^0.3.25",
     "reflect-metadata": "^0.2.2",
