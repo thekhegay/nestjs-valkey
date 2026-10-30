@@ -1,6 +1,6 @@
 {
   "name": "nestjs-valkey",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Valkey and Redis stores for @nestjs/locks and @nestjs/idempotency, on valkey-glide or ioredis, standalone or cluster",
   "license": "MIT",
   "author": "Roman Khegay <rk@garuna.dev> (https://garuna.dev)",
