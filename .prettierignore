@@ -2,3 +2,6 @@ dist/
 coverage/
 pnpm-lock.yaml
 .tmp/
+
+# Written by scripts/release.mjs
+CHANGELOG.md
