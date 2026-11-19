@@ -19,6 +19,7 @@ ignore it. Three of them decide most reviews:
 ```sh
 pnpm install
 pnpm test             # unit suite, no server needed
+pnpm test:coverage    # the same with coverage, what CI sends to Codecov
 pnpm servers:up       # Valkey standalone, a 3-primary cluster and Sentinel in Docker
 pnpm test:servers     # both official contract suites and the behaviour tests
 pnpm test:consumers   # Nest 11 CommonJS and Nest 12 ESM apps on the packed package

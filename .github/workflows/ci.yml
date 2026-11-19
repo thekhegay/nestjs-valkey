@@ -40,7 +40,12 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm build
-      - run: pnpm test
+      - run: pnpm test:coverage
+      - uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
       - run: pnpm check:package
       # On a release branch, the changelog it was cut with has to name every
       # commit that ships, before it merges: once merged, the cure is a revert
