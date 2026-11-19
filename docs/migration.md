@@ -1,0 +1,4 @@
+# Moving from the documentation's recipes
+
+- **Idempotency:** the same hash at `idem:<key>`, with the same fields and scripts (`complete()`'s has one line more, its `allow-oom` flag), so instances on the recipe and on this store read each other's records; switch at any time, during a rolling deploy too. A recipe client with an ioredis `keyPrefix` keeps its records at `<keyPrefix>idem:<key>`: a store on that client reads them as they are, and a store on glide, which has no `keyPrefix`, needs `prefix: '<keyPrefix>idem:'`.
+- **Locks:** the keys differ (`locks:key:<key>` and `locks:fencing-token` there), so old and new instances do not exclude each other. Stop every instance, then start them on this store. Its tokens are far above any value the recipe's counter reached, so resources fenced with old tokens accept the new ones.
