@@ -9,7 +9,7 @@ updates:
       time: '08:00'
       timezone: 'Asia/Almaty'
     cooldown:
-      default-days: 1
+      default-days: 7
     open-pull-requests-limit: 10
     # @types/node moves with the Node floor in engines, not on its own
     ignore:
@@ -50,6 +50,8 @@ updates:
       day: 'monday'
       time: '08:00'
       timezone: 'Asia/Almaty'
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns:
