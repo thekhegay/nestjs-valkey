@@ -1,9 +1,5 @@
 name: Release
 
-# Publishes when a `chore(release): vX.Y.Z` commit lands on main. The bump
-# itself goes through a pull request like any other change - release-pr.yml
-# cuts it from the Actions tab - so nothing here pushes to a protected branch:
-# the tag is all this workflow writes.
 on:
   push:
     branches: [main]
@@ -12,29 +8,27 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-permissions:
-  contents: read
+permissions: {}
 
-# SHA-pinned because this workflow holds the npm OIDC token; keep the version comments.
 jobs:
   release:
     name: Tag, release and publish
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: "${{ startsWith(github.event.head_commit.message, 'chore(release): v') }}"
 
     permissions:
       contents: write
       id-token: write
-      # The release body names the pull request behind each entry.
       pull-requests: read
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] pushes the tag with git after the publish
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
       # No dependency cache: this job holds the npm OIDC token, and a poisoned
       # cache would hand it to whatever the cache restores.
@@ -50,8 +44,7 @@ jobs:
 
       - run: pnpm typecheck
 
-      # The unit suite only: the Docker-backed suites ran on the release pull
-      # request, whose CI this commit has to pass before it can merge.
+      # Unit suite only: the Docker suites ran on the release pull request
       - run: pnpm test
 
       # 11.15.0 is where `npm stage` arrived; trusted publishing needs 11.5.1.
@@ -83,14 +76,9 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      # A feat or fix merged after the release pull request was cut would ship
-      # with no line in CHANGELOG.md. CI ran this on the release branch before
-      # it merged; here it can only stop the publish (see the message for the
-      # cure).
       - name: Check the changelog names everything that ships
         run: pnpm release:check
 
-      # Builds, then publint, attw and the tarball check on what gets staged.
       - run: pnpm check:package
 
       - name: Write the release body
@@ -98,23 +86,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pnpm release:body "--output=$RUNNER_TEMP/release-body.md"
 
-      # Staged, not direct: the trusted publisher deliberately does not allow
-      # `npm publish`, so a compromised run cannot put a version in front of
-      # users. The release is live once a maintainer approves it with 2FA,
-      # either on npmjs.com or with `npm stage approve`.
+      # Staged, not direct: the trusted publisher does not allow `npm publish`
       - name: Stage the release on npm
         run: npm stage publish --access public --provenance
 
-      # Tagged after the publish: a tag naming a version npm rejected is worse
-      # than no tag, because the next attempt would refuse to reuse it.
       - name: Tag the release
+        env:
+          TAG: ${{ steps.bump.outputs.tag }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a "${{ steps.bump.outputs.tag }}" -m "${{ steps.bump.outputs.tag }}"
-          git push origin "${{ steps.bump.outputs.tag }}"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
 
-      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ steps.bump.outputs.tag }}
           name: ${{ steps.bump.outputs.tag }}
