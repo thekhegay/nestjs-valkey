@@ -1,0 +1,108 @@
+name: 🐛 Bug report
+description: A store or runner does not behave the way it should
+title: 'bug: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A script or a test that shows the problem against a real server is the fastest way to a fix.
+
+  - type: input
+    id: package-version
+    attributes:
+      label: nestjs-valkey version
+      description: Output of `npm ls nestjs-valkey`.
+      placeholder: '0.1.0'
+    validations:
+      required: true
+
+  - type: input
+    id: nest-versions
+    attributes:
+      label: Nest packages
+      description: Versions of `@nestjs/common` and of `@nestjs/locks` or `@nestjs/idempotency`.
+      placeholder: '@nestjs/common 12.3.2, @nestjs/locks 0.0.5'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client
+      options:
+        - valkey-glide
+        - ioredis
+        - iovalkey
+        - Another client (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: client-version
+    attributes:
+      label: Client version
+      placeholder: '2.6.0'
+    validations:
+      required: true
+
+  - type: input
+    id: server
+    attributes:
+      label: Server
+      description: Valkey or Redis, and its version.
+      placeholder: 'Valkey 9.1'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: topology
+    attributes:
+      label: Topology
+      options:
+        - Standalone
+        - Cluster
+        - Sentinel
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      placeholder: '24.11.0'
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: A script, a test or a link to a small repository.
+      render: ts
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error and stack trace
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched [existing issues](https://github.com/thekhegay/nestjs-valkey/issues) and found no duplicate
+          required: true
+        - label: I am on the latest nestjs-valkey
+          required: false
