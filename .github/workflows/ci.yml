@@ -101,7 +101,7 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm add -D @valkey/valkey-glide@2.0.1
+      - run: pnpm add -D @valkey/valkey-glide@2.0.1 # zizmor: ignore[adhoc-packages] the job tests the lowest glide the peer range allows
       - run: docker compose -f docker/compose.yml up -d --wait
       - run: pnpm typecheck
       - run: pnpm test:servers
