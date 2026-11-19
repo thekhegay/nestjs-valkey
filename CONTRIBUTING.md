@@ -22,13 +22,14 @@ pnpm test             # unit suite, no server needed
 pnpm servers:up       # Valkey standalone, a 3-primary cluster and Sentinel in Docker
 pnpm test:servers     # both official contract suites and the behaviour tests
 pnpm test:consumers   # Nest 11 CommonJS and Nest 12 ESM apps on the packed package
+pnpm test:chaos       # CLUSTER FAILOVER of each shard under load (reshuffles the cluster)
 pnpm servers:down
 pnpm lint
 pnpm check:package    # publint, attw and the tarball contents
 ```
 
 To run the server suite against Redis as well, start it with
-`docker compose -f docker/compose.yml --profile redis up -d --wait` (Redis on 16380) and set `REDIS_URL=redis://127.0.0.1:16380`. A change to a script needs
+`docker compose -f docker/compose.yml --profile redis up -d --wait` (Redis on 16380) and set `REDIS_URL=redis://127.0.0.1:16380`. `VALKEY_IMAGE=valkey/valkey:7.2-alpine` picks another Valkey (CI runs 7.2, 8.1 and 9.1), and `CONSUMER_NODES="22.12=/path/to/node,26=/path/to/node"` runs the consumer applications on other Node versions. A change to a script needs
 a test that fails without it on a real server; a green test that would stay
 green with the fix removed proves nothing.
 

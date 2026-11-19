@@ -2,7 +2,7 @@
 
 Guidance for anyone, human or not, changing **nestjs-valkey**: Valkey and Redis
 stores for the Nest team's `@nestjs/locks` and `@nestjs/idempotency`. What the
-package does and how to use it is in [README.md](README.md); this file is about
+package does and how to use it is in [README.md](README.md) and [docs/](docs/); this file is about
 how to work in the repository and why it is shaped the way it is.
 
 ## Layout
